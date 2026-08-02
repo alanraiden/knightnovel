@@ -1,8 +1,1 @@
-{
-  "/browse/page": "app/browse/page.js",
-  "/page": "app/page.js",
-  "/community/page": "app/community/page.js",
-  "/api/auth/[...nextauth]/route": "app/api/auth/[...nextauth]/route.js",
-  "/api/comments/route": "app/api/comments/route.js",
-  "/novel/[slug]/page": "app/novel/[slug]/page.js"
-}
+{}
