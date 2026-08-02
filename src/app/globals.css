@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-serif: "Merriweather", Georgia, serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: #0a0f1c;
+  color: #f3f5f7;
+}
+
+/* Themed scrollbars for horizontal rows (Continue Reading, highlights, etc.) */
+.themed-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #28364f #121b2d;
+}
+.themed-scroll::-webkit-scrollbar {
+  height: 6px;
+}
+.themed-scroll::-webkit-scrollbar-track {
+  background: #121b2d;
+  border-radius: 4px;
+}
+.themed-scroll::-webkit-scrollbar-thumb {
+  background: #28364f;
+  border-radius: 4px;
+}
+.themed-scroll::-webkit-scrollbar-thumb:hover {
+  background: #2f3e56;
+}
+
+/* Reading page themes */
+.reading-theme-dark {
+  background: #0a0f1c;
+  color: #f3f5f7;
+}
+.reading-theme-light {
+  background: #ffffff;
+  color: #1a1a1a;
+}
+.reading-theme-sepia {
+  background: #f4ecd8;
+  color: #3a2e1f;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Subtle glass effect (~10-20% opacity) — used sparingly: hero overlay,
+   search bar, filter drawer, notification window, bottom nav. Not applied
+   site-wide so it stays a deliberate accent rather than a default look. */
+.glass {
+  background: rgba(24, 35, 56, 0.55);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(243, 245, 247, 0.08);
+}
+.glass-light {
+  background: rgba(243, 245, 247, 0.08);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(243, 245, 247, 0.1);
+}
