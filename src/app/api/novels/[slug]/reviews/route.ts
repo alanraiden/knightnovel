@@ -10,23 +10,6 @@ const bodySchema = z.object({
   reviewText: z.string().max(2000).optional(),
 });
 
-export async function GET(_req: NextRequest, { params }: { params: { slug: string } }) {
-  const session = await getServerSession(authOptions);
-  const userId = (session?.user as { id?: string } | undefined)?.id;
-  if (!session || !userId) return NextResponse.json({ rating: null, reviewText: "" });
-
-  try {
-    const { novels, ratingsReviews } = await collections();
-    const novel = await novels.findOne({ slug: params.slug });
-    if (!novel) return NextResponse.json({ rating: null, reviewText: "" });
-
-    const existing = await ratingsReviews.findOne({ novelId: novel._id, userId: new ObjectId(userId) });
-    return NextResponse.json({ rating: existing?.rating ?? null, reviewText: existing?.reviewText ?? "" });
-  } catch {
-    return NextResponse.json({ rating: null, reviewText: "" });
-  }
-}
-
 export async function POST(req: NextRequest, { params }: { params: { slug: string } }) {
   const session = await getServerSession(authOptions);
   const userId = (session?.user as { id?: string } | undefined)?.id;

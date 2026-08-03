@@ -77,9 +77,13 @@ body {
 /* Much lower opacity than .glass — used only on the homepage hero, where the
    featured novel's artwork needs to stay visible behind the content instead
    of being hidden by a near-opaque panel. Single panel, not stacked. */
+/* Flat tint only — deliberately NO backdrop-filter here. This panel covers
+   almost the entire hero (see hero-carousel.tsx), so any blur() on it passes
+   through to the artwork behind it and blurs the whole background — that was
+   the actual bug behind "the hero looks hazy/out of focus." A plain
+   low-opacity tint still gives text contrast without touching the artwork's
+   sharpness. */
 .glass-hero {
-  background: rgba(10, 15, 28, 0.3);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(10, 15, 28, 0.16);
   border: 1px solid rgba(243, 245, 247, 0.07);
 }

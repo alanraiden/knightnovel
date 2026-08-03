@@ -59,7 +59,7 @@ export function HeroCarousel({ novels }: { novels: DemoNovel[] }) {
           {/* Light left-to-right fade only — just enough for text contrast,
               the artwork on the right stays fully visible. No full-bleed
               dark wash on top of it. */}
-          <div className="absolute inset-0 bg-gradient-to-r from-base/75 via-base/25 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-r from-base/80 via-base/30 to-transparent" />
           {/* Faint bottom fade, mobile-only, where text stacks over the image
               instead of sitting beside it. */}
           <div className="absolute inset-0 bg-gradient-to-t from-base/55 to-transparent md:hidden" />

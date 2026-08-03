@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getNovelBySlug, getAllNovels, getChapterContent, getCommentsPage, incrementNovelViews } from "@/lib/queries";
+import { getNovelBySlug, getAllNovels, getChapterContent, getCommentsPage } from "@/lib/queries";
 import { ReadingShell } from "@/components/chapter/reading-shell";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://knightnovel.com";
@@ -36,10 +36,6 @@ export default async function ChapterPage({
 
   const [novel, allNovels] = await Promise.all([getNovelBySlug(params.slug), getAllNovels()]);
   if (!novel) notFound();
-
-  // Fire-and-forget — a view counter failing shouldn't ever block the page
-  // from rendering, and there's no reason to make the reader wait on it.
-  incrementNovelViews(novel.slug).catch(() => {});
 
   const chapterDoc = await getChapterContent(params.slug, chapterNumber);
   // Real chapter id when available (DB-backed), otherwise a stable

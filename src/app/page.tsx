@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { HeroCarousel } from "@/components/novel/hero-carousel";
 import { NovelCard } from "@/components/novel/novel-card";
 import { SectionHeader } from "@/components/layout/section-header";
@@ -93,7 +94,11 @@ export default async function HomePage() {
               className="flex items-center gap-3 rounded px-2 py-2 text-sm hover:bg-card"
             >
               <span className="w-4 text-text-muted">{i + 1}</span>
-              <div className="h-8 w-8 shrink-0 rounded bg-card" />
+              <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded bg-card">
+                {n.cover && (
+                  <Image src={n.cover} alt="" fill sizes="32px" className="object-cover" />
+                )}
+              </div>
               <span className="flex-1 truncate text-text-primary">{n.title}</span>
               <span className="text-accent-highlight">★ {n.rating}</span>
             </a>
@@ -107,7 +112,11 @@ export default async function HomePage() {
           <ul className="space-y-3">
             {newlyAdded.map((n) => (
               <li key={n.slug} className="flex items-center gap-3">
-                <div className="h-10 w-10 shrink-0 rounded bg-card" />
+                <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded bg-card">
+                  {n.cover && (
+                    <Image src={n.cover} alt="" fill sizes="40px" className="object-cover" />
+                  )}
+                </div>
                 <div className="min-w-0 flex-1">
                   <a href={`/novel/${n.slug}`} className="block truncate text-sm text-text-primary">
                     {n.title}
@@ -125,7 +134,11 @@ export default async function HomePage() {
           <ul className="space-y-3">
             {recentlyUpdated.map((n) => (
               <li key={n.slug} className="flex items-center gap-3">
-                <div className="h-10 w-10 shrink-0 rounded bg-card" />
+                <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded bg-card">
+                  {n.cover && (
+                    <Image src={n.cover} alt="" fill sizes="40px" className="object-cover" />
+                  )}
+                </div>
                 <div className="min-w-0 flex-1">
                   <a href={`/novel/${n.slug}`} className="block truncate text-sm text-text-primary">
                     {n.title}

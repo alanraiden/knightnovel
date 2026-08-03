@@ -68,8 +68,11 @@ export function CommunityClient({
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6">
-      {/* Sticky search + filter bar — sticky on all sizes, most useful on mobile */}
-      <div className="glass sticky top-14 z-20 -mx-4 mb-6 flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center">
+      {/* Search + filter bar. Sticky on sm+ only, where it's a single compact
+          row — on mobile it stacks into 4 rows (search / sort / novel /
+          category), so keeping it sticky there pinned nearly half the
+          screen permanently, unlike Browse's non-sticky filter bar. */}
+      <div className="glass sm:sticky sm:top-14 z-20 -mx-4 mb-6 flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center">
         <h1 className="hidden text-lg font-medium text-text-primary sm:block">Community</h1>
         <div className="flex flex-1 items-center gap-2 rounded border border-border bg-card/60 px-3 py-2 sm:max-w-sm">
           <Search size={15} className="text-text-muted" />

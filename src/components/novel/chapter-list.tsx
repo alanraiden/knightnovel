@@ -3,20 +3,14 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ChevronRight, ChevronLeft, LayoutGrid, List } from "lucide-react";
-import { cn, timeAgo } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 30;
 const MAX_PAGE_BUTTONS = 5;
 
-interface ChapterEntry {
-  chapterNumber: number;
-  publishedAt: string | null; // null when running on demo data with no real chapter docs
-}
-
 export function ChapterList({ slug, chapterCount }: { slug: string; chapterCount: number }) {
   const [page, setPage] = useState(0);
   const [view, setView] = useState<"grid" | "list">("grid");
-  const [entries, setEntries] = useState<ChapterEntry[] | null>(null);
 
   // Grid by default on desktop, List by default on mobile — user can still
   // switch manually afterward, this only sets the initial value.
@@ -27,38 +21,7 @@ export function ChapterList({ slug, chapterCount }: { slug: string; chapterCount
   const totalPages = Math.max(1, Math.ceil(chapterCount / PAGE_SIZE));
   const start = page * PAGE_SIZE + 1;
   const end = Math.min(chapterCount, start + PAGE_SIZE - 1);
-
-  // Real chapter data (with publish dates) when available; falls back to
-  // synthetic numbering (no date shown) so demo mode still renders fine.
-  useEffect(() => {
-    let cancelled = false;
-    fetch(`/api/novels/${slug}/chapters?page=${page + 1}`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (cancelled) return;
-        if (Array.isArray(data.chapters) && data.chapters.length) {
-          setEntries(
-            data.chapters.map((c: { chapterNumber: number; publishedAt: string }) => ({
-              chapterNumber: c.chapterNumber,
-              publishedAt: c.publishedAt,
-            }))
-          );
-        } else {
-          setEntries(null);
-        }
-      })
-      .catch(() => setEntries(null));
-    return () => {
-      cancelled = true;
-    };
-  }, [slug, page]);
-
-  const chapters: ChapterEntry[] =
-    entries ??
-    Array.from({ length: Math.max(0, end - start + 1) }, (_, i) => ({
-      chapterNumber: start + i,
-      publishedAt: null,
-    }));
+  const chapters = Array.from({ length: Math.max(0, end - start + 1) }, (_, i) => start + i);
 
   // Windowed page numbers: current page ± 2, so this stays readable even
   // with hundreds of pages (500+ chapter novels).
@@ -99,12 +62,11 @@ export function ChapterList({ slug, chapterCount }: { slug: string; chapterCount
         <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
           {chapters.map((c) => (
             <Link
-              key={c.chapterNumber}
-              href={`/novel/${slug}/chapter/${c.chapterNumber}`}
-              className="rounded border border-border px-2.5 py-1.5 text-xs text-text-secondary hover:border-border-hover hover:text-text-primary"
+              key={c}
+              href={`/novel/${slug}/chapter/${c}`}
+              className="truncate rounded border border-border px-2.5 py-1.5 text-xs text-text-secondary hover:border-border-hover hover:text-text-primary"
             >
-              <span className="block truncate">Ch.{c.chapterNumber}</span>
-              {c.publishedAt && <span className="block text-[10px] text-text-disabled">{timeAgo(c.publishedAt)}</span>}
+              Ch.{c}
             </Link>
           ))}
         </div>
@@ -112,15 +74,12 @@ export function ChapterList({ slug, chapterCount }: { slug: string; chapterCount
         <div className="divide-y divide-border rounded-card border border-border">
           {chapters.map((c) => (
             <Link
-              key={c.chapterNumber}
-              href={`/novel/${slug}/chapter/${c.chapterNumber}`}
+              key={c}
+              href={`/novel/${slug}/chapter/${c}`}
               className="flex items-center justify-between px-3 py-2 text-sm text-text-secondary hover:bg-surface hover:text-text-primary"
             >
-              <span>Chapter {c.chapterNumber}</span>
-              <span className="flex items-center gap-2">
-                {c.publishedAt && <span className="text-xs text-text-disabled">{timeAgo(c.publishedAt)}</span>}
-                <ChevronRight size={14} className="text-text-muted" />
-              </span>
+              <span>Chapter {c}</span>
+              <ChevronRight size={14} className="text-text-muted" />
             </Link>
           ))}
         </div>

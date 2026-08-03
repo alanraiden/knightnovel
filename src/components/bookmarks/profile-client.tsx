@@ -22,7 +22,6 @@ export function ProfileClient({ data, myComments }: { data: DashboardData; myCom
   const [sort, setSort] = useState<(typeof sortOptions)[number]>("Recently read");
   const [sortOpen, setSortOpen] = useState(false);
   const [folderModalOpen, setFolderModalOpen] = useState(false);
-  const [commentsShown, setCommentsShown] = useState(10);
 
   const [bookmarks, setBookmarks] = useState<DashboardBookmark[]>(data.bookmarks);
   const [folders, setFolders] = useState(data.folders);
@@ -45,21 +44,8 @@ export function ProfileClient({ data, myComments }: { data: DashboardData; myCom
   }, [bookmarks, query, activeTab, sort]);
 
   const removeBookmark = (slug: string) => setBookmarks((prev) => prev.filter((b) => b.novel.slug !== slug));
-  const changeFolder = (slug: string, folderId: string | null) => {
+  const changeFolder = (slug: string, folderId: string | null) =>
     setBookmarks((prev) => prev.map((b) => (b.novel.slug === slug ? { ...b, folderId } : b)));
-    // The BookmarkCard's own inline folder picker already PATCHes directly,
-    // but the FolderManagerModal calls this function instead — it was only
-    // ever updating local state, never actually saving, so a refresh
-    // silently reverted the change. Fixed by persisting here too.
-    fetch(`/api/bookmarks/${slug}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ folderId }),
-    }).catch(() => {
-      // best-effort — if this fails the optimistic UI is already wrong,
-      // but there's nothing more useful to do than let the next load fix it
-    });
-  };
 
   const createFolder = async (name: string) => {
     try {
@@ -203,7 +189,7 @@ export function ProfileClient({ data, myComments }: { data: DashboardData; myCom
           </p>
         ) : (
           <div className="space-y-2">
-            {myComments.slice(0, commentsShown).map((c) => (
+            {myComments.map((c) => (
               <Link
                 key={c.id}
                 href={`/novel/${c.novelSlug}#comment-${c.id}`}
@@ -222,14 +208,6 @@ export function ProfileClient({ data, myComments }: { data: DashboardData; myCom
                 )}
               </Link>
             ))}
-            {commentsShown < myComments.length && (
-              <button
-                onClick={() => setCommentsShown((n) => n + 10)}
-                className="w-full rounded-card border border-border py-2 text-xs text-text-secondary hover:border-border-hover"
-              >
-                Load more ({myComments.length - commentsShown} remaining)
-              </button>
-            )}
           </div>
         )}
       </section>

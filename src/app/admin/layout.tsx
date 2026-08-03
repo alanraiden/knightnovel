@@ -11,7 +11,6 @@ const links = [
   { href: "/admin/featured", label: "Featured" },
   { href: "/admin/moderation", label: "Moderation" },
   { href: "/admin/ghost-comments", label: "Ghost Comments" },
-  { href: "/admin/ghost-discussions", label: "Ghost Discussions" },
   { href: "/admin/announcements", label: "Announcements" },
   { href: "/admin/analytics", label: "Analytics" },
 ];
