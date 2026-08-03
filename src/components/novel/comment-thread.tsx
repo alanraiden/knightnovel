@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useSession } from "next-auth/react";
 import { ThumbsUp, ThumbsDown, MessageCircle, Flag, Eye, Image as ImageIcon, Loader2 } from "lucide-react";
 import { ReportModal } from "@/components/shared/report-modal";
+import { AutoResizeTextarea } from "@/components/shared/auto-resize-textarea";
 import { cn } from "@/lib/utils";
 import type { CommentView, CommentSort } from "@/lib/queries";
 
@@ -248,12 +249,12 @@ export function CommentComposer({
 
   return (
     <div className={compact ? "" : "rounded-card border border-border bg-surface p-3"}>
-      <textarea
+      <AutoResizeTextarea
         value={text}
         onChange={(e) => setText(e.target.value)}
         placeholder={compact ? "Write a reply…" : "Join the discussion…"}
         rows={3}
-        className="w-full resize-none rounded border border-border bg-card px-2.5 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none"
+        className="w-full rounded border border-border bg-card px-2.5 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none"
       />
 
       {stickerPreview && (

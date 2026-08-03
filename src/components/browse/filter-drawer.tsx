@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { Filter as FilterIcon, X, ChevronDown } from "lucide-react";
 import { GENRES } from "@/lib/genres";
-import { demoTags } from "@/lib/seed-data";
 import { cn } from "@/lib/utils";
 
 export interface BrowseFilters {
@@ -21,9 +20,11 @@ const countries = ["Chinese", "Korean", "Japanese"];
 export function FilterDrawer({
   filters,
   onChange,
+  availableTags,
 }: {
   filters: BrowseFilters;
   onChange: (f: BrowseFilters) => void;
+  availableTags: string[];
 }) {
   const [open, setOpen] = useState(false);
   const [tagQuery, setTagQuery] = useState("");
@@ -31,10 +32,10 @@ export function FilterDrawer({
 
   const filteredTags = useMemo(
     () =>
-      demoTags
+      availableTags
         .filter((t) => t.toLowerCase().includes(tagQuery.toLowerCase()))
         .filter((t) => !filters.tags.includes(t)),
-    [tagQuery, filters.tags]
+    [availableTags, tagQuery, filters.tags]
   );
 
   const toggle = (key: "status" | "genres" | "country", value: string) => {

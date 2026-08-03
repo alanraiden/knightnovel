@@ -37,6 +37,12 @@ export function BrowseClient({ novels, initialParams }: { novels: NovelView[]; i
     country: initialParams?.country ? [initialParams.country] : [],
   }));
 
+  const availableTags = useMemo(() => {
+    const seen = new Set<string>();
+    novels.forEach((n) => n.tags.forEach((t) => seen.add(t)));
+    return [...seen].sort();
+  }, [novels]);
+
   const results = useMemo(() => {
     const filtered = novels.filter((n) => {
       if (filters.status.length && !filters.status.includes(n.status)) return false;
@@ -94,7 +100,7 @@ export function BrowseClient({ novels, initialParams }: { novels: NovelView[]; i
               {qf.label}
             </button>
           ))}
-          <FilterDrawer filters={filters} onChange={setFilters} />
+          <FilterDrawer filters={filters} onChange={setFilters} availableTags={availableTags} />
         </div>
       </div>
 

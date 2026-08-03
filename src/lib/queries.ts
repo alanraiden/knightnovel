@@ -811,6 +811,30 @@ export async function getAllChaptersForSitemap(): Promise<ChapterSitemapEntry[]>
   }
 }
 
+// Called on every chapter page view. Increments all four counters together
+// since there's no scheduled job (yet) to reset the daily/weekly/monthly
+// windows — they'll functionally track total views until that job exists.
+// Documented honestly rather than pretending real time-windowed counts.
+export async function incrementNovelViews(novelSlug: string): Promise<void> {
+  if (!hasDb()) return;
+  try {
+    const { novels } = await collections();
+    await novels.updateOne(
+      { slug: novelSlug },
+      {
+        $inc: {
+          "counters.viewsTotal": 1,
+          "counters.viewsDaily": 1,
+          "counters.viewsWeekly": 1,
+          "counters.viewsMonthly": 1,
+        },
+      }
+    );
+  } catch (err) {
+    console.error("[queries] incrementNovelViews:", err);
+  }
+}
+
 export async function getChaptersForAdmin(slug: string): Promise<ChapterListItem[]> {
   if (!hasDb()) return [];
   try {
