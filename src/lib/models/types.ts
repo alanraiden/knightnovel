@@ -11,6 +11,9 @@ export interface Novel {
   authors: string[];
   description: string;
   coverImageUrl: string;
+  /** Optional wide cinematic art for the homepage hero slide. Falls back to a
+   *  blurred coverImageUrl when unset — see fromMongo() in queries.ts. */
+  heroBackgroundUrl?: string;
   genres: string[];
   tags: string[];
   status: NovelStatus;

@@ -74,3 +74,12 @@ body {
   -webkit-backdrop-filter: blur(10px);
   border: 1px solid rgba(243, 245, 247, 0.1);
 }
+/* Much lower opacity than .glass — used only on the homepage hero, where the
+   featured novel's artwork needs to stay visible behind the content instead
+   of being hidden by a near-opaque panel. Single panel, not stacked. */
+.glass-hero {
+  background: rgba(10, 15, 28, 0.3);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(243, 245, 247, 0.07);
+}

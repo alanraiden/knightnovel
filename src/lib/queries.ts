@@ -30,6 +30,7 @@ function fromMongo(doc: Novel & { _id: ObjectId }): NovelView {
     altTitles: doc.altTitles ?? [],
     author: (doc.authors ?? []).join(", "),
     cover: doc.coverImageUrl || "",
+    heroBackground: doc.heroBackgroundUrl || "",
     genres: doc.genres ?? [],
     tags: doc.tags ?? [],
     status,
@@ -38,6 +39,7 @@ function fromMongo(doc: Novel & { _id: ObjectId }): NovelView {
     chapterCount: doc.chapterCount ?? 0,
     description: doc.description ?? "",
     views: formatViews(doc.counters?.viewsTotal ?? 0),
+    bookmarks: formatViews(doc.counters?.favorites ?? 0),
     createdAt: (doc.createdAt ?? new Date()).toISOString(),
     lastChapterAddedAt: (doc.lastChapterAddedAt ?? doc.createdAt ?? new Date()).toISOString(),
   };

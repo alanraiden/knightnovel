@@ -3,7 +3,14 @@ import { collections } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { z } from "zod";
 
-const bodySchema = z.object({ slugs: z.array(z.string()).max(5) });
+// Separate from the general novel-edit PATCH route on purpose: this only ever
+// touches heroBackgroundUrl, so the Featured admin page can save it inline
+// per-slide without needing to send (or risk overwriting) the rest of the
+// novel's fields.
+const bodySchema = z.object({
+  slug: z.string().min(1),
+  url: z.string(), // empty string clears it, falling back to the blurred cover
+});
 
 export async function POST(req: NextRequest) {
   const session = await requireAdmin();
@@ -11,19 +18,15 @@ export async function POST(req: NextRequest) {
 
   const parsed = bodySchema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: "Invalid data." }, { status: 400 });
-  const { slugs } = parsed.data;
+  const { slug, url } = parsed.data;
 
   try {
     const { novels } = await collections();
-    // Unset everyone, then set the chosen ones in order — simplest way to
-    // guarantee no stale featured novels linger if they're removed from the list.
-    await novels.updateMany({}, { $set: { isFeatured: false }, $unset: { featuredOrder: "" } });
-    await Promise.all(
-      slugs.map((slug, i) =>
-        novels.updateOne({ slug }, { $set: { isFeatured: true, featuredOrder: i } })
-      )
-    );
-    return NextResponse.json({ ok: true });
+    const result = await novels.updateOne({ slug }, { $set: { heroBackgroundUrl: url } });
+    if (result.matchedCount === 0) {
+      return NextResponse.json({ error: "Novel not found." }, { status: 404 });
+    }
+    return NextResponse.json({ ok: true, url });
   } catch {
     return NextResponse.json(
       { error: "Database not configured. Set MONGODB_URI in .env.local." },

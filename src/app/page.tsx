@@ -25,7 +25,7 @@ export const metadata = {
 export default async function HomePage() {
   const [featured, highlights, trending, rankings, newlyAdded, recentlyUpdated, discussions] =
     await Promise.all([
-      getFeatured(3),
+      getFeatured(5),
       getAllNovels(),
       getTrending(5),
       getRankingsForPeriod("day", 5),

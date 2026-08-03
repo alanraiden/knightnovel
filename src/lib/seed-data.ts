@@ -8,6 +8,9 @@ export interface DemoNovel {
   altTitles: string[];
   author: string;
   cover: string;
+  /** Optional wide cinematic art for the homepage hero slide. Empty string
+   *  (the demo default) means the hero falls back to a blurred cover instead. */
+  heroBackground?: string;
   genres: string[];
   tags: string[];
   status: "ongoing" | "completed" | "hiatus";
@@ -16,6 +19,8 @@ export interface DemoNovel {
   chapterCount: number;
   description: string;
   views: string;
+  /** Formatted bookmark/favorite count, same real-vs-demo pattern as `views`. */
+  bookmarks: string;
   createdAt: string; // ISO string, kept simple for the demo fallback
   lastChapterAddedAt: string;
 }
@@ -36,6 +41,7 @@ export const demoNovels: DemoNovel[] = [
     description:
       "A clandestine legend rises in a world of guns, potions, and supernatural secrets.",
     views: "125.4K",
+    bookmarks: "18.2K",
     createdAt: new Date(Date.now() - 10 * 24 * 3600_000).toISOString(),
     lastChapterAddedAt: new Date(Date.now() - 1 * 3600_000).toISOString(),
   },
@@ -53,6 +59,7 @@ export const demoNovels: DemoNovel[] = [
     chapterCount: 542,
     description: "Every night, Sunny becomes someone else — a Shadow, hunted through a nightmare realm.",
     views: "98.7K",
+    bookmarks: "14.6K",
     createdAt: new Date(Date.now() - 20 * 24 * 3600_000).toISOString(),
     lastChapterAddedAt: new Date(Date.now() - 3 * 3600_000).toISOString(),
   },
@@ -70,6 +77,7 @@ export const demoNovels: DemoNovel[] = [
     chapterCount: 551,
     description: "The only reader of a webnovel finds himself living inside its ending.",
     views: "87.1K",
+    bookmarks: "12.9K",
     createdAt: new Date(Date.now() - 5 * 24 * 3600_000).toISOString(),
     lastChapterAddedAt: new Date(Date.now() - 5 * 3600_000).toISOString(),
   },
@@ -87,6 +95,7 @@ export const demoNovels: DemoNovel[] = [
     chapterCount: 6304,
     description: "The journey to the martial peak is a long, solitary and treacherous one.",
     views: "125.4K",
+    bookmarks: "21.5K",
     createdAt: new Date(Date.now() - 30 * 24 * 3600_000).toISOString(),
     lastChapterAddedAt: new Date(Date.now() - 2 * 3600_000).toISOString(),
   },
@@ -104,6 +113,7 @@ export const demoNovels: DemoNovel[] = [
     chapterCount: 2334,
     description: "A cunning and ruthless cultivator schemes his way to immortality.",
     views: "76.3K",
+    bookmarks: "9.8K",
     createdAt: new Date(Date.now() - 15 * 24 * 3600_000).toISOString(),
     lastChapterAddedAt: new Date(Date.now() - 4 * 3600_000).toISOString(),
   },
@@ -121,6 +131,7 @@ export const demoNovels: DemoNovel[] = [
     chapterCount: 427,
     description: "King Grey reigned supreme, but solitude clouded his victories. Reborn, he's given a second life.",
     views: "65.2K",
+    bookmarks: "8.1K",
     createdAt: new Date(Date.now() - 8 * 24 * 3600_000).toISOString(),
     lastChapterAddedAt: new Date(Date.now() - 6 * 3600_000).toISOString(),
   },

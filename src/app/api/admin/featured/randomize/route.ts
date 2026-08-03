@@ -8,7 +8,7 @@ export async function POST() {
 
   try {
     const { novels } = await collections();
-    const count = Math.min(3, await novels.countDocuments({}));
+    const count = Math.min(5, await novels.countDocuments({}));
     const picked = await novels.aggregate([{ $sample: { size: count } }]).toArray();
 
     await novels.updateMany({}, { $set: { isFeatured: false }, $unset: { featuredOrder: "" } });
