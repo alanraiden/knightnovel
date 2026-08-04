@@ -500,6 +500,33 @@ export interface NotificationView {
   replyBody?: string;
   createdAt: string;
   link?: string;
+  isRead: boolean;
+}
+
+// Cheap, separate from getNotificationsForUser so the navbar can show a
+// badge on every page load without pulling and hydrating the full list.
+export async function getUnreadNotificationCount(userId: string): Promise<number> {
+  if (!hasDb()) return 0;
+  try {
+    const { notifications } = await collections();
+    return await notifications.countDocuments({ userId: new ObjectId(userId), isRead: false });
+  } catch (err) {
+    console.error("[queries] getUnreadNotificationCount — returning 0:", err);
+    return 0;
+  }
+}
+
+export async function markNotificationsRead(userId: string): Promise<void> {
+  if (!hasDb()) return;
+  try {
+    const { notifications } = await collections();
+    await notifications.updateMany(
+      { userId: new ObjectId(userId), isRead: false },
+      { $set: { isRead: true } }
+    );
+  } catch (err) {
+    console.error("[queries] markNotificationsRead — no-op:", err);
+  }
 }
 
 export async function getNotificationsForUser(userId: string, limit = 20): Promise<NotificationView[]> {
@@ -525,6 +552,7 @@ export async function getNotificationsForUser(userId: string, limit = 20): Promi
           replyBody: n.payload.message,
           createdAt: n.createdAt.toISOString(),
           link: n.payload.link,
+          isRead: Boolean(n.isRead),
         });
       } else if (n.type === "chapter_update") {
         results.push({
@@ -533,6 +561,7 @@ export async function getNotificationsForUser(userId: string, limit = 20): Promi
           text: n.payload?.message,
           createdAt: n.createdAt.toISOString(),
           link: n.payload?.link,
+          isRead: Boolean(n.isRead),
         });
       }
     }
@@ -546,6 +575,7 @@ export async function getNotificationsForUser(userId: string, limit = 20): Promi
         type: "announcement",
         text: a.body,
         createdAt: a.publishedAt.toISOString(),
+        isRead: true,
       });
     }
 

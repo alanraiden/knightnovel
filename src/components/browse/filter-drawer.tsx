@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { Filter as FilterIcon, X, ChevronDown } from "lucide-react";
 import { GENRES } from "@/lib/genres";
-import { demoTags } from "@/lib/seed-data";
 import { cn } from "@/lib/utils";
 
 export interface BrowseFilters {
@@ -21,9 +20,11 @@ const countries = ["Chinese", "Korean", "Japanese"];
 export function FilterDrawer({
   filters,
   onChange,
+  availableTags,
 }: {
   filters: BrowseFilters;
   onChange: (f: BrowseFilters) => void;
+  availableTags: string[];
 }) {
   const [open, setOpen] = useState(false);
   const [tagQuery, setTagQuery] = useState("");
@@ -31,10 +32,10 @@ export function FilterDrawer({
 
   const filteredTags = useMemo(
     () =>
-      demoTags
+      availableTags
         .filter((t) => t.toLowerCase().includes(tagQuery.toLowerCase()))
         .filter((t) => !filters.tags.includes(t)),
-    [tagQuery, filters.tags]
+    [availableTags, tagQuery, filters.tags]
   );
 
   const toggle = (key: "status" | "genres" | "country", value: string) => {
@@ -58,7 +59,7 @@ export function FilterDrawer({
     <div className="relative">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1.5 rounded border border-border bg-surface px-3 py-1.5 text-sm text-text-secondary hover:border-border-hover"
+        className="flex items-center gap-1.5 rounded border border-border bg-surface px-3 py-1.5 text-sm text-text-secondary transition-all duration-200 hover:-translate-y-0.5 hover:border-accent-highlight/50 hover:text-text-primary"
       >
         <FilterIcon size={14} /> Filter
       </button>
@@ -165,10 +166,10 @@ function Chip({
     <button
       onClick={onClick}
       className={cn(
-        "rounded border px-2.5 py-1 text-[11px] transition-colors",
+        "rounded border px-2.5 py-1 text-[11px] transition-all duration-200",
         active
           ? "border-accent bg-accent/15 text-accent"
-          : "border-border text-text-secondary hover:border-border-hover"
+          : "border-border text-text-secondary hover:border-accent-highlight/50 hover:text-text-primary"
       )}
     >
       {children}

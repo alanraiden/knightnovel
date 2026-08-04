@@ -1,5 +1,8 @@
 import Link from "next/link";
 import { Search } from "lucide-react";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { getUnreadNotificationCount } from "@/lib/queries";
 import { NotificationWindow } from "@/components/layout/notification-window";
 import { UserMenu } from "@/components/layout/user-menu";
 
@@ -9,7 +12,11 @@ const navLinks = [
   { href: "/community", label: "Community" },
 ];
 
-export function Navbar() {
+export async function Navbar() {
+  const session = await getServerSession(authOptions);
+  const userId = (session?.user as { id?: string } | undefined)?.id;
+  const initialUnreadCount = userId ? await getUnreadNotificationCount(userId) : 0;
+
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-base/95 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4">
@@ -44,7 +51,7 @@ export function Navbar() {
           <Link href="/search" aria-label="Search" className="sm:hidden text-text-secondary">
             <Search size={19} />
           </Link>
-          <NotificationWindow />
+          <NotificationWindow initialUnreadCount={initialUnreadCount} />
           <UserMenu />
         </div>
       </div>

@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import { HeroCarousel } from "@/components/novel/hero-carousel";
 import { NovelCard } from "@/components/novel/novel-card";
 import { SectionHeader } from "@/components/layout/section-header";
@@ -91,39 +92,58 @@ export default async function HomePage() {
             <a
               key={n.slug}
               href={`/novel/${n.slug}`}
-              className="flex items-center gap-3 rounded px-2 py-2 text-sm hover:bg-card"
+              className="group flex items-center gap-3 rounded px-2 py-2 text-sm transition-colors duration-200 hover:bg-card"
             >
               <span className="w-4 text-text-muted">{i + 1}</span>
               <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded bg-card">
                 {n.cover && (
-                  <Image src={n.cover} alt="" fill sizes="32px" className="object-cover" />
+                  <Image
+                    src={n.cover}
+                    alt=""
+                    fill
+                    sizes="32px"
+                    className="object-cover transition-transform duration-300 ease-out group-hover:scale-110"
+                  />
                 )}
               </div>
-              <span className="flex-1 truncate text-text-primary">{n.title}</span>
+              <span className="flex-1 truncate text-text-primary transition-colors duration-200 group-hover:text-accent-highlight">
+                {n.title}
+              </span>
               <span className="text-accent-highlight">★ {n.rating}</span>
             </a>
           ))}
         </div>
       </section>
 
-      <div className="grid gap-8 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
         <section>
           <SectionHeader title="Newly Added" href="/browse?sort=newest" />
           <ul className="space-y-3">
             {newlyAdded.map((n) => (
-              <li key={n.slug} className="flex items-center gap-3">
-                <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded bg-card">
-                  {n.cover && (
-                    <Image src={n.cover} alt="" fill sizes="40px" className="object-cover" />
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <a href={`/novel/${n.slug}`} className="block truncate text-sm text-text-primary">
-                    {n.title}
-                  </a>
-                  <p className="truncate text-xs text-text-muted">{n.genres.join(" · ")}</p>
-                </div>
-                <span className="shrink-0 text-xs text-text-muted">{timeAgo(n.createdAt)}</span>
+              <li key={n.slug}>
+                <Link
+                  href={`/novel/${n.slug}`}
+                  className="group -mx-1.5 flex items-center gap-3 rounded-card p-1.5 transition-colors duration-200 hover:bg-card"
+                >
+                  <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded bg-card">
+                    {n.cover && (
+                      <Image
+                        src={n.cover}
+                        alt=""
+                        fill
+                        sizes="40px"
+                        className="object-cover transition-transform duration-300 ease-out group-hover:scale-110"
+                      />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm text-text-primary transition-colors duration-200 group-hover:text-accent-highlight">
+                      {n.title}
+                    </p>
+                    <p className="truncate text-xs text-text-muted">{n.genres.join(" · ")}</p>
+                  </div>
+                  <span className="shrink-0 text-xs text-text-muted">{timeAgo(n.createdAt)}</span>
+                </Link>
               </li>
             ))}
           </ul>
@@ -133,19 +153,30 @@ export default async function HomePage() {
           <SectionHeader title="Recently Updated" href="/browse?sort=updated" />
           <ul className="space-y-3">
             {recentlyUpdated.map((n) => (
-              <li key={n.slug} className="flex items-center gap-3">
-                <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded bg-card">
-                  {n.cover && (
-                    <Image src={n.cover} alt="" fill sizes="40px" className="object-cover" />
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <a href={`/novel/${n.slug}`} className="block truncate text-sm text-text-primary">
-                    {n.title}
-                  </a>
-                  <p className="truncate text-xs text-text-muted">Ch.{n.chapterCount}</p>
-                </div>
-                <span className="shrink-0 text-xs text-text-muted">{timeAgo(n.lastChapterAddedAt)}</span>
+              <li key={n.slug}>
+                <Link
+                  href={`/novel/${n.slug}`}
+                  className="group -mx-1.5 flex items-center gap-3 rounded-card p-1.5 transition-colors duration-200 hover:bg-card"
+                >
+                  <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded bg-card">
+                    {n.cover && (
+                      <Image
+                        src={n.cover}
+                        alt=""
+                        fill
+                        sizes="40px"
+                        className="object-cover transition-transform duration-300 ease-out group-hover:scale-110"
+                      />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm text-text-primary transition-colors duration-200 group-hover:text-accent-highlight">
+                      {n.title}
+                    </p>
+                    <p className="truncate text-xs text-text-muted">Ch.{n.chapterCount}</p>
+                  </div>
+                  <span className="shrink-0 text-xs text-text-muted">{timeAgo(n.lastChapterAddedAt)}</span>
+                </Link>
               </li>
             ))}
           </ul>

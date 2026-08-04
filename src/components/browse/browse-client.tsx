@@ -37,6 +37,12 @@ export function BrowseClient({ novels, initialParams }: { novels: NovelView[]; i
     country: initialParams?.country ? [initialParams.country] : [],
   }));
 
+  const availableTags = useMemo(() => {
+    const seen = new Set<string>();
+    novels.forEach((n) => n.tags.forEach((t) => seen.add(t)));
+    return [...seen].sort();
+  }, [novels]);
+
   const results = useMemo(() => {
     const filtered = novels.filter((n) => {
       if (filters.status.length && !filters.status.includes(n.status)) return false;
@@ -85,16 +91,16 @@ export function BrowseClient({ novels, initialParams }: { novels: NovelView[]; i
                 setFilters((prev) => ({ ...prev, sort: prev.sort === qf.sort ? "" : qf.sort }))
               }
               className={cn(
-                "rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
+                "rounded-full px-3 py-1.5 text-xs font-medium transition-all duration-200 hover:-translate-y-0.5",
                 filters.sort === qf.sort
-                  ? "bg-accent-highlight text-[#412402]"
+                  ? "bg-accent-highlight text-[#412402] hover:brightness-110"
                   : "border border-accent-highlight/40 text-accent-highlight hover:bg-accent-highlight/10"
               )}
             >
               {qf.label}
             </button>
           ))}
-          <FilterDrawer filters={filters} onChange={setFilters} />
+          <FilterDrawer filters={filters} onChange={setFilters} availableTags={availableTags} />
         </div>
       </div>
 

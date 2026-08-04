@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { put } from "@vercel/blob";
+import { isR2Configured, uploadImageToR2 } from "@/lib/r2";
 
 export const runtime = "nodejs";
 
@@ -9,11 +9,11 @@ export async function POST(req: NextRequest) {
   // TODO: once next-auth session is required for posting, reject
   // unauthenticated uploads here too — right now anyone can hit this route.
 
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+  if (!isR2Configured()) {
     return NextResponse.json(
       {
         error:
-          "Sticker uploads aren't configured yet. Enable Vercel Blob storage on this project (Vercel dashboard → Storage → Create Database → Blob) — it sets BLOB_READ_WRITE_TOKEN automatically.",
+          "Sticker uploads aren't configured yet. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME, and R2_PUBLIC_URL (Cloudflare dashboard → R2).",
       },
       { status: 503 }
     );
@@ -33,11 +33,11 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const blob = await put(`stickers/${Date.now()}-${file.name}`, file, {
-      access: "public",
-      addRandomSuffix: true,
-    });
-    return NextResponse.json({ url: blob.url });
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const key = `stickers/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safeName}`;
+    const url = await uploadImageToR2(buffer, key, file.type);
+    return NextResponse.json({ url });
   } catch (err) {
     console.error("[uploads/sticker]", err);
     return NextResponse.json({ error: "Upload failed" }, { status: 500 });

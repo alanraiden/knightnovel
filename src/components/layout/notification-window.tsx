@@ -15,12 +15,14 @@ interface NotificationItem {
   replyBody?: string;
   createdAt: string;
   link?: string;
+  isRead: boolean;
 }
 
-export function NotificationWindow() {
+export function NotificationWindow({ initialUnreadCount }: { initialUnreadCount: number }) {
   const { data: session } = useSession();
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<NotificationItem[] | null>(null);
+  const [unreadCount, setUnreadCount] = useState(initialUnreadCount);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -32,12 +34,20 @@ export function NotificationWindow() {
   }, []);
 
   useEffect(() => {
-    if (!open || !session || items !== null) return;
-    fetch("/api/notifications")
-      .then((r) => r.json())
-      .then((data) => setItems(data.notifications ?? []))
-      .catch(() => setItems([]));
-  }, [open, session, items]);
+    if (!open || !session) return;
+    if (items === null) {
+      fetch("/api/notifications")
+        .then((r) => r.json())
+        .then((data) => setItems(data.notifications ?? []))
+        .catch(() => setItems([]));
+    }
+    // Clear the badge as soon as they open it — matches the read state
+    // being persisted server-side via the same request.
+    if (unreadCount > 0) {
+      setUnreadCount(0);
+      fetch("/api/notifications/read", { method: "POST" }).catch(() => {});
+    }
+  }, [open, session, items, unreadCount]);
 
   if (!session) return null; // nothing to notify a logged-out visitor about
 
@@ -45,10 +55,13 @@ export function NotificationWindow() {
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((o) => !o)}
-        aria-label="Notifications"
-        className="relative text-text-secondary hover:text-text-primary"
+        aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
+        className="relative text-text-secondary transition-colors hover:text-text-primary"
       >
         <Bell size={19} />
+        {unreadCount > 0 && (
+          <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-status-error ring-2 ring-base" />
+        )}
       </button>
 
       {open && (

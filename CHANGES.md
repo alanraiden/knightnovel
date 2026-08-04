@@ -1,55 +1,60 @@
-# Changes — Homepage cover fix + Community mobile sticky-bar fix
+# Changes — Hero polish, auto-advance, Browse micro-interactions, Community tag links
 
-## Request: "Novel covers aren't showing on homepage Rankings/Newly Added/
-Recently Updated, and the Community search/filter bar stays stuck on screen
-when scrolling on phone."
+## 1. Mobile Read Now button (`hero-carousel.tsx`)
+Was `w-full py-3` (a full-width bar). Changed to match the desktop button's
+actual sizing (`w-fit px-4 py-2`), so it's a normal inline-sized button
+instead of stretching edge to edge.
 
-### 1. Missing covers on homepage (`src/app/page.tsx`)
-Found the bug: the Rankings, Newly Added, and Recently Updated sections were
-never wired up to render a cover image at all — each row used a plain empty
-`<div className="h-8 w-8 ... bg-card" />` (or `h-10 w-10`) as a placeholder
-that was never replaced with an actual `<Image>`. The data was there (every
-`NovelView` already carries `cover`), it just wasn't being rendered in these
-three sections — Highlights/Trending never had this problem since
-`NovelCard` already renders covers correctly.
+## 2. Desktop hero — removed the heavy overlay, kept true glassmorphism (`hero-carousel.tsx`)
+There was no literal `blur()` filter left over from last time, but two
+stacked dark gradients (`from-base via-base/85` horizontal + `from-base/90`
+vertical) were covering most of the image — enough that it read as "blurred
+out" even though it wasn't. Removed both and replaced with a single light
+bottom fade, just enough to keep the arrows/dots legible. Legibility for the
+title/stats now comes entirely from the `.glass` panel itself (semi-opaque
+background + `backdrop-filter: blur(14px)` — that's the actual glassmorphism,
+and it was already there, just fighting against the overlay for attention).
+The art itself is now fully visible everywhere the glass panel isn't sitting.
 
-Fixed by rendering a real `next/image` thumbnail (32px in Rankings, 40px in
-Newly Added / Recently Updated) in the same slot, falling back to the empty
-card-colored box only if a novel genuinely has no `cover` set — same
-honest-empty-state convention used elsewhere.
+## 3. Auto-advancing hero (`hero-carousel.tsx`)
+Added a `setInterval` that calls the existing `go(1)` every 8 seconds
+(inside your requested 7–10s range). It re-arms on every navigation —
+manual click, arrow, or automatic — so clicking right before it would've
+auto-advanced doesn't cause a jump right after. Didn't touch the underlying
+carousel logic (`index` state, `go()`, wraparound) at all, just added the
+timer around it.
 
-### 2. Community search/filter bar swallowing the screen on mobile (`src/components/community/community-client.tsx`)
-Found the bug: the bar was `sticky top-14` **on all screen sizes**. On
-desktop it's a single row and sticky makes sense. On mobile it's `flex-col`,
-so it stacks into 4 full rows — search box, Recent/Popular buttons, "All
-novels" dropdown, "All categories" dropdown — and that entire stack was
-pinned to the top of the viewport permanently, which is what you were
-seeing as it being "stuck" no matter how far you scrolled. It wasn't a
-rendering bug, just sticky positioning applied where it shouldn't have been.
+## 4. Browse page micro-interactions (`browse-client.tsx`, `filter-drawer.tsx`)
+`NovelCard` (Trending/Newly Added/etc., and Browse's whole grid) already had
+the full lift/scale/shadow/gold-border hover treatment from before — that
+carries over to Browse automatically since it's the same shared component,
+nothing needed there. What Browse's own controls were missing:
+- Quick-filter pills (Trending/Newly Added/Recently Updated) — added the
+  lift + brighten used elsewhere.
+- The "Filter" toggle button — added lift + gold border on hover.
+- Status/tag pills inside the filter drawer — swapped the plain border-color
+  hover for the gold-outline treatment used on genre tags elsewhere.
 
-Changed it to `sm:sticky sm:top-14` — sticky only kicks in at the `sm`
-breakpoint and up, where it's the compact single-row layout it was designed
-for. On mobile it now scrolls away normally with the page, same as Browse's
-filter bar already does (Browse never had this problem because its bar was
-never sticky to begin with).
-
-### Note on the third item mentioned
-You mentioned a general "layout problem in phone mode" separate from the
-above two — I couldn't pin down a third distinct bug from the screenshots
-alone (the homepage one looks like it may just be a scroll position when the
-screenshot was taken, not a rendering issue). Also worth flagging: you said
-you'd made some edits of your own on top of what I last delivered, so what I
-had on hand (the hero-update zip + full-project zip) may not exactly match
-what's currently live. If there's still a layout issue after this fix,
-send a screenshot with a description of what's wrong vs. what you'd expect,
-and ideally the current state of any file you hand-edited — happy to dig in.
+## 5. Community — Popular Tags now link to Browse (`community-client.tsx`)
+These were plain `<span>`s, not clickable at all. Now each is a `<Link
+href="/browse?tag=<tag>">`, matching the `tag` query param Browse's filter
+logic already reads (confirmed against `browse-client.tsx`'s existing
+`initialParams.tag` handling — no changes needed on the Browse side). Added
+the same gold-outline hover feedback as the other tag treatments for
+consistency. Nothing else on the Community page was touched.
 
 ### Verified
-- `npm install && npx next build` — compiles clean, all routes generate.
-- `next start` + `curl` smoke test: homepage now renders 28 real cover
-  `<Image>` elements (was 1 before, only the hero); confirmed `sm:sticky
-  sm:top-14` is present on the Community filter bar in the rendered HTML.
+- `npx next build` — compiles clean.
+- `next start` + `curl`: home/browse/community all return 200. Confirmed in
+  rendered HTML: mobile Read Now button is no longer full-width, the old
+  heavy gradient class is gone, Browse's lift class is present on the
+  quick-filter buttons. Couldn't confirm the Popular Tags links visually in
+  this sandbox — `getPopularTags()` returns an empty list whenever
+  `MONGODB_URI` isn't set (by design, pre-existing behavior, nothing to do
+  with this change), so the section rendered its "No tags yet" empty state
+  here. Confirmed the link markup itself is correct directly in the source.
+  Will render real linked tags once your DB has novels with tags in it.
 
 ### Not touched
-Nothing else in these two files or elsewhere was changed — no other
-sections, styling, or logic modified.
+Community page beyond the Popular Tags links, as requested. Hero carousel's
+index/state logic. NovelCard/DiscussionCard (already had the full treatment).

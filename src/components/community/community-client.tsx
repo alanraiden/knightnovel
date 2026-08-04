@@ -222,9 +222,13 @@ export function CommunityClient({
             </p>
             <div className="flex flex-wrap gap-1.5">
               {popularTags.map((t) => (
-                <span key={t.tag} className="rounded border border-border px-2 py-1 text-[11px] text-text-secondary">
+                <Link
+                  key={t.tag}
+                  href={`/browse?tag=${encodeURIComponent(t.tag)}`}
+                  className="rounded border border-border px-2 py-1 text-[11px] text-text-secondary transition-all duration-200 hover:border-accent-highlight/60 hover:text-text-primary"
+                >
                   {t.tag}
-                </span>
+                </Link>
               ))}
               {popularTags.length === 0 && <p className="text-xs text-text-muted">No tags yet.</p>}
             </div>
