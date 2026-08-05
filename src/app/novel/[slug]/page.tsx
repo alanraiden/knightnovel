@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import Image from "next/image";
 import { notFound } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { getNovelBySlug, getNovelSlugs, getAllNovels, getCommentsPage, getUserNovelStatus } from "@/lib/queries";
+import { getNovelBySlug, getNovelSlugs, getAllNovels, getCommentsPage, getUserNovelStatus, incrementNovelViews } from "@/lib/queries";
 import { NovelActions } from "@/components/novel/novel-actions";
 import { TagList } from "@/components/novel/tag-list";
 import { ChapterList } from "@/components/novel/chapter-list";
@@ -60,6 +61,10 @@ export default async function NovelPage({ params }: { params: { slug: string } }
 
   const [novel, allNovels] = await Promise.all([getNovelBySlug(params.slug), getAllNovels()]);
   if (!novel) notFound();
+
+  // Fire-and-forget, same pattern as the chapter page — a view counter
+  // failing shouldn't block the page, and there's no reason to wait on it.
+  incrementNovelViews(novel.slug).catch(() => {});
 
   const [related, commentsPage, { isBookmarked, isFavorited }] = await Promise.all([
     Promise.resolve(relatedByTagOverlap(novel, allNovels)),
@@ -141,9 +146,13 @@ export default async function NovelPage({ params }: { params: { slug: string } }
             {novel.genres.length > 0 && (
               <div className="mt-1.5 flex flex-wrap gap-1.5">
                 {novel.genres.map((g) => (
-                  <span key={g} className="rounded bg-card px-2 py-0.5 text-[11px] text-text-secondary">
+                  <Link
+                    key={g}
+                    href={`/browse?genre=${encodeURIComponent(g)}`}
+                    className="rounded bg-card px-2 py-0.5 text-[11px] text-text-secondary transition-all duration-200 hover:border-accent-highlight/60 hover:text-text-primary border border-transparent"
+                  >
                     {g}
-                  </span>
+                  </Link>
                 ))}
               </div>
             )}

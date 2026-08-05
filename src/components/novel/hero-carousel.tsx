@@ -65,7 +65,7 @@ export function HeroCarousel({ novels }: { novels: DemoNovel[] }) {
               sizes="100vw"
               className={cn(
                 "object-cover",
-                hasCustomBackground ? "object-[70%_center]" : "scale-125 object-[center_30%]"
+                hasCustomBackground ? "object-[70%_center]" : "object-[center_15%]"
               )}
             />
             {/* Sharp, fully visible art — legibility now comes from the glass
