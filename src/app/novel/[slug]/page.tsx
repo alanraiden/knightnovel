@@ -8,6 +8,7 @@ import { getNovelBySlug, getNovelSlugs, getAllNovels, getCommentsPage, getUserNo
 import { NovelActions } from "@/components/novel/novel-actions";
 import { TagList } from "@/components/novel/tag-list";
 import { ChapterList } from "@/components/novel/chapter-list";
+import { AdSlot } from "@/components/ads/ad-slot";
 import { CommentThread } from "@/components/novel/comment-thread";
 import { NovelCard } from "@/components/novel/novel-card";
 import { DescriptionCollapse } from "@/components/novel/description-collapse";
@@ -102,6 +103,10 @@ export default async function NovelPage({ params }: { params: { slug: string } }
       {/* eslint-disable-next-line react/no-danger */}
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }} />
 
+      <div className="mb-4">
+        <AdSlot page="novel" position="top" />
+      </div>
+
       <div className="relative overflow-hidden rounded-card">
         {novel.cover && (
           <div className="absolute inset-0">
@@ -179,6 +184,8 @@ export default async function NovelPage({ params }: { params: { slug: string } }
         <div className="space-y-8">
           <ChapterList slug={novel.slug} chapterCount={novel.chapterCount} />
 
+          <AdSlot page="novel" position="middle" />
+
           <div>
             <p className="mb-2 text-sm font-medium text-text-primary">Ratings & reviews</p>
             <div className="rounded-card border border-border bg-surface p-3 text-sm text-text-muted">
@@ -207,6 +214,10 @@ export default async function NovelPage({ params }: { params: { slug: string } }
             ))}
           </div>
         </aside>
+      </div>
+
+      <div className="mt-8">
+        <AdSlot page="novel" position="bottom" />
       </div>
     </div>
   );

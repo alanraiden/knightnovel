@@ -39,6 +39,8 @@ export function DiscussionThreadClient({
   const handlePosted = (c: CommentView) => setComments((prev) => [...prev, c]);
   const handleVoteUpdate = (id: string, up: number, down: number) =>
     setComments((prev) => prev.map((c) => (c.id === id ? { ...c, up, down } : c)));
+  const handleCommentEdited = (id: string, body: string, editedAt: string) =>
+    setComments((prev) => prev.map((c) => (c.id === id ? { ...c, body, editedAt } : c)));
 
   const share = async () => {
     const url = window.location.href;
@@ -212,6 +214,7 @@ export function DiscussionThreadClient({
         targetId={novelSlug}
         onPosted={handlePosted}
         onVoteUpdate={handleVoteUpdate}
+        onEdited={handleCommentEdited}
         locked={root.isLocked}
       />
     </div>

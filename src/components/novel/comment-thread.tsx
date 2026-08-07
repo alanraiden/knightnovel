@@ -2,10 +2,29 @@
 
 import { useState } from "react";
 import { useSession } from "next-auth/react";
-import { ThumbsUp, ThumbsDown, MessageCircle, Flag, Eye, Image as ImageIcon, Loader2 } from "lucide-react";
+import { ThumbsUp, ThumbsDown, MessageCircle, Flag, Eye, Image as ImageIcon, Loader2, Pencil, Check, X } from "lucide-react";
 import { ReportModal } from "@/components/shared/report-modal";
-import { cn } from "@/lib/utils";
+import { AutoResizeTextarea } from "@/components/shared/auto-resize-textarea";
+import { cn, timeAgo } from "@/lib/utils";
 import type { CommentView, CommentSort } from "@/lib/queries";
+
+const MENTION_RE = /@([a-zA-Z0-9_]{3,20})/g;
+
+// Highlights @username mentions inline — no link target exists yet (no
+// public profile-by-username page), so this is styling only for now.
+function renderWithMentions(text: string) {
+  const parts = text.split(MENTION_RE);
+  if (parts.length === 1) return text;
+  return parts.map((part, i) =>
+    i % 2 === 1 ? (
+      <span key={i} className="font-medium text-accent-highlight">
+        @{part}
+      </span>
+    ) : (
+      part
+    )
+  );
+}
 
 interface Props {
   targetType: "novel" | "chapter";
@@ -47,6 +66,8 @@ export function CommentThread({
   };
   const handleVoteUpdate = (id: string, up: number, down: number) =>
     setComments((prev) => prev.map((c) => (c.id === id ? { ...c, up, down } : c)));
+  const handleEdited = (id: string, body: string, editedAt: string) =>
+    setComments((prev) => prev.map((c) => (c.id === id ? { ...c, body, editedAt } : c)));
 
   const fetchPage = async (nextSort: CommentSort, offset: number) => {
     const params = new URLSearchParams({
@@ -125,6 +146,7 @@ export function CommentThread({
               targetId={targetId}
               onPosted={handlePosted}
               onVoteUpdate={handleVoteUpdate}
+              onEdited={handleEdited}
             />
           ))
         )}
@@ -248,12 +270,12 @@ export function CommentComposer({
 
   return (
     <div className={compact ? "" : "rounded-card border border-border bg-surface p-3"}>
-      <textarea
+      <AutoResizeTextarea
         value={text}
         onChange={(e) => setText(e.target.value)}
         placeholder={compact ? "Write a reply…" : "Join the discussion…"}
-        rows={3}
-        className="w-full resize-none rounded border border-border bg-card px-2.5 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none"
+        rows={5}
+        className="w-full rounded border border-border bg-card px-2.5 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none"
       />
 
       {stickerPreview && (
@@ -307,6 +329,7 @@ export function CommentItem({
   targetId,
   onPosted,
   onVoteUpdate,
+  onEdited,
   locked = false,
 }: {
   comment: CommentView;
@@ -315,6 +338,7 @@ export function CommentItem({
   targetId: string;
   onPosted: (c: CommentView) => void;
   onVoteUpdate: (id: string, up: number, down: number) => void;
+  onEdited: (id: string, body: string, editedAt: string) => void;
   locked?: boolean;
 }) {
   const { data: session } = useSession();
@@ -324,9 +348,36 @@ export function CommentItem({
   const [showAllReplies, setShowAllReplies] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [voting, setVoting] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editBody, setEditBody] = useState(comment.body);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState("");
   const replies = repliesOf(comment.id);
   const isLong = comment.body.length > 140;
   const displayBody = expanded || !isLong ? comment.body : comment.body.slice(0, 140) + "…";
+  const isOwn = Boolean(session?.user && (session.user as { id?: string }).id === comment.authorId);
+
+  const saveEdit = async () => {
+    const trimmed = editBody.trim();
+    if (!trimmed || savingEdit) return;
+    setSavingEdit(true);
+    setEditError("");
+    try {
+      const res = await fetch(`/api/comments/${comment.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body: trimmed }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Couldn't save edit");
+      onEdited(comment.id, trimmed, data.editedAt);
+      setEditing(false);
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : "Couldn't save edit");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
 
   const vote = async (direction: "up" | "down") => {
     if (!session) {
@@ -360,6 +411,19 @@ export function CommentItem({
         <div className="mb-1.5 flex items-center gap-2 text-xs text-text-muted">
           <div className="h-6 w-6 rounded-full bg-card" />
           <span className="text-text-secondary">{comment.author}</span>
+          {comment.createdAt && (
+            <>
+              <span className="text-text-disabled">·</span>
+              <span suppressHydrationWarning title={new Date(comment.createdAt).toLocaleString()}>
+                {timeAgo(comment.createdAt)}
+              </span>
+            </>
+          )}
+          {comment.editedAt && (
+            <span suppressHydrationWarning title={new Date(comment.editedAt).toLocaleString()}>
+              · Edited {timeAgo(comment.editedAt)}
+            </span>
+          )}
         </div>
 
         {!revealed ? (
@@ -369,9 +433,38 @@ export function CommentItem({
           >
             <Eye size={11} className="mr-1 inline" /> Spoiler — tap to reveal
           </button>
+        ) : editing ? (
+          <div>
+            <AutoResizeTextarea
+              value={editBody}
+              onChange={(e) => setEditBody(e.target.value)}
+              rows={3}
+              className="w-full rounded border border-border bg-card px-2.5 py-2 text-sm text-text-primary focus:outline-none"
+            />
+            {editError && <p className="mt-1 text-xs text-status-error">{editError}</p>}
+            <div className="mt-1.5 flex gap-2">
+              <button
+                onClick={saveEdit}
+                disabled={savingEdit}
+                className="flex items-center gap-1 rounded bg-accent-highlight px-2.5 py-1 text-xs font-medium text-[#412402] disabled:opacity-60"
+              >
+                <Check size={12} /> Save
+              </button>
+              <button
+                onClick={() => {
+                  setEditing(false);
+                  setEditBody(comment.body);
+                  setEditError("");
+                }}
+                className="flex items-center gap-1 rounded border border-border px-2.5 py-1 text-xs text-text-secondary"
+              >
+                <X size={12} /> Cancel
+              </button>
+            </div>
+          </div>
         ) : (
           <>
-            {comment.body && <p className="text-sm text-text-secondary">{displayBody}</p>}
+            {comment.body && <p className="text-sm text-text-secondary">{renderWithMentions(displayBody)}</p>}
             {isLong && (
               <button onClick={() => setExpanded((v) => !v)} className="mt-1 text-xs text-accent">
                 {expanded ? "Show less" : "Read more"}
@@ -396,6 +489,14 @@ export function CommentItem({
               className="flex items-center gap-1 text-xs hover:text-text-secondary"
             >
               <MessageCircle size={13} /> Reply
+            </button>
+          )}
+          {isOwn && !editing && (
+            <button
+              onClick={() => setEditing(true)}
+              className="flex items-center gap-1 text-xs hover:text-text-secondary"
+            >
+              <Pencil size={12} /> Edit
             </button>
           )}
           <button onClick={() => setReportOpen(true)} className="ml-auto hover:text-status-error" aria-label="Report">
@@ -426,6 +527,7 @@ export function CommentItem({
             targetId={targetId}
             onPosted={onPosted}
             onVoteUpdate={onVoteUpdate}
+            onEdited={onEdited}
             locked={locked}
           />
         </div>

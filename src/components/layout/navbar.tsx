@@ -1,8 +1,9 @@
 import Link from "next/link";
+import Image from "next/image";
 import { Search } from "lucide-react";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { getUnreadNotificationCount } from "@/lib/queries";
+import { getUnreadNotificationCount, getSiteLogoUrl } from "@/lib/queries";
 import { NotificationWindow } from "@/components/layout/notification-window";
 import { UserMenu } from "@/components/layout/user-menu";
 
@@ -15,14 +16,23 @@ const navLinks = [
 export async function Navbar() {
   const session = await getServerSession(authOptions);
   const userId = (session?.user as { id?: string } | undefined)?.id;
-  const initialUnreadCount = userId ? await getUnreadNotificationCount(userId) : 0;
+  const [initialUnreadCount, logoUrl] = await Promise.all([
+    userId ? getUnreadNotificationCount(userId) : Promise.resolve(0),
+    getSiteLogoUrl(),
+  ]);
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-base/95 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4">
         <div className="flex items-center gap-8">
           <Link href="/" className="flex items-center gap-2 text-[15px] font-medium text-text-primary">
-            <ShieldBookMark />
+            {logoUrl ? (
+              <span className="relative h-[22px] w-[22px]">
+                <Image src={logoUrl} alt="" fill sizes="22px" className="object-contain" />
+              </span>
+            ) : (
+              <ShieldBookMark />
+            )}
             Knight Novel
           </Link>
           {/* Desktop-only nav links — mobile uses the bottom nav instead */}

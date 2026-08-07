@@ -69,5 +69,6 @@ export async function collections() {
     reports: db.collection("reports"), // covers reported comments, reviews, users, AND reported stickers
     notifications: db.collection("notifications"),
     announcements: db.collection("announcements"),
+    settings: db.collection("settings"),
   };
 }

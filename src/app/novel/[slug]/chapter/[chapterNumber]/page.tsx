@@ -1,7 +1,16 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getNovelBySlug, getAllNovels, getChapterContent, getCommentsPage } from "@/lib/queries";
+import { getNovelBySlug, getAllNovels, getChapterContent, getCommentsPage, incrementNovelViews } from "@/lib/queries";
 import { ReadingShell } from "@/components/chapter/reading-shell";
+import { AdSlot } from "@/components/ads/ad-slot";
+
+// Without this, Next.js treats the route as static-eligible (nothing here
+// reads cookies/session) and caches the rendered page server-side after the
+// first visit to each chapter number — so the view counter below would only
+// actually fire once per chapter total, not once per reader. Forcing
+// dynamic rendering makes sure every visit re-runs the page, including the
+// increment.
+export const dynamic = "force-dynamic";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://knightnovel.com";
 
@@ -36,6 +45,10 @@ export default async function ChapterPage({
 
   const [novel, allNovels] = await Promise.all([getNovelBySlug(params.slug), getAllNovels()]);
   if (!novel) notFound();
+
+  // Fire-and-forget — a view counter failing shouldn't ever block the page
+  // from rendering, and there's no reason to make the reader wait on it.
+  incrementNovelViews(novel.slug).catch(() => {});
 
   const chapterDoc = await getChapterContent(params.slug, chapterNumber);
   // Real chapter id when available (DB-backed), otherwise a stable
@@ -79,6 +92,9 @@ export default async function ChapterPage({
         totalTopLevel={commentsPage.totalTopLevel}
         totalAll={commentsPage.totalAll}
         hasMore={commentsPage.hasMore}
+        topAd={<AdSlot page="chapter" position="top" />}
+        middleAd={<AdSlot page="chapter" position="middle" />}
+        bottomAd={<AdSlot page="chapter" position="bottom" />}
       />
     </>
   );

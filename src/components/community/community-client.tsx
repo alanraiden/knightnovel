@@ -19,6 +19,9 @@ export function CommunityClient({
   mostActiveNovels,
   trendingNovels,
   novels,
+  topAd,
+  middleAd,
+  bottomAd,
 }: {
   discussions: DiscussionView[];
   popularTags: { tag: string; count: number }[];
@@ -26,6 +29,9 @@ export function CommunityClient({
   mostActiveNovels: { novel: NovelView; discussionCount: number }[];
   trendingNovels: NovelView[];
   novels: NovelView[];
+  topAd?: React.ReactNode;
+  middleAd?: React.ReactNode;
+  bottomAd?: React.ReactNode;
 }) {
   const { data: session } = useSession();
   const [query, setQuery] = useState("");
@@ -129,6 +135,8 @@ export function CommunityClient({
         </button>
       </div>
 
+      {topAd && <div className="mb-6">{topAd}</div>}
+
       <div className="grid gap-8 lg:grid-cols-[1fr_280px]">
         <div className="space-y-10">
           {/* Section: Most Active Novels — horizontal cover strip */}
@@ -181,6 +189,8 @@ export function CommunityClient({
             )}
           </section>
 
+          {middleAd && <div>{middleAd}</div>}
+
           {/* Section: Latest Chapter Comments */}
           <section>
             <p className="mb-3 text-sm font-medium text-text-primary">Latest Chapter Comments</p>
@@ -196,6 +206,8 @@ export function CommunityClient({
               </div>
             )}
           </section>
+
+          {bottomAd && <div>{bottomAd}</div>}
         </div>
 
         <aside className="hidden space-y-6 lg:block">

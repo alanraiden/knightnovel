@@ -44,6 +44,9 @@ export function ReadingShell({
   totalTopLevel,
   totalAll,
   hasMore,
+  topAd,
+  middleAd,
+  bottomAd,
 }: {
   novel: DemoNovel;
   chapterNumber: number;
@@ -55,6 +58,9 @@ export function ReadingShell({
   totalTopLevel: number;
   totalAll: number;
   hasMore: boolean;
+  topAd?: React.ReactNode;
+  middleAd?: React.ReactNode;
+  bottomAd?: React.ReactNode;
 }) {
   const { data: session } = useSession();
   const [theme, setTheme] = useState<Theme>("dark");
@@ -101,6 +107,7 @@ export function ReadingShell({
   return (
     <div className={cn("min-h-screen transition-colors", themeClasses[theme])}>
       <div className="mx-auto max-w-2xl px-4 pb-24 pt-3">
+        {topAd && <div className="mb-3">{topAd}</div>}
         <div className="mb-2 flex items-center justify-between text-sm">
           <Link href={`/novel/${novel.slug}`} aria-label="Back to novel" className="opacity-70 hover:opacity-100">
             <ArrowLeft size={18} />
@@ -183,6 +190,8 @@ export function ReadingShell({
           )}
         </div>
 
+        {middleAd && <div className="mt-6">{middleAd}</div>}
+
         <section className="mt-8">
           <p className="mb-2 text-sm font-medium opacity-90">You might also like</p>
           <div className="grid grid-cols-3 gap-3">
@@ -202,6 +211,8 @@ export function ReadingShell({
             hasMore={hasMore}
           />
         </section>
+
+        {bottomAd && <div className="mt-8">{bottomAd}</div>}
       </div>
 
       {/* Floating nav — appears once the reader has scrolled past the top controls */}

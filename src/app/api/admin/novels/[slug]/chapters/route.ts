@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { collections } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth-helpers";
+import { filterUsersByNotificationPref } from "@/lib/queries";
 import { z } from "zod";
 
 export async function GET(_req: NextRequest, { params }: { params: { slug: string } }) {
@@ -87,23 +88,35 @@ export async function POST(req: NextRequest, { params }: { params: { slug: strin
       { $set: { chapterCount: totalChapters, lastChapterAddedAt: now, updatedAt: now } }
     );
 
-    // Notify everyone who has this novel bookmarked.
+    // Notify everyone who has this novel bookmarked and hasn't opted out
+    // of chapter-update notifications.
     const { bookmarks, notifications } = await collections();
     const bookmarkers = await bookmarks.find({ novelId: novel._id }).toArray();
     if (bookmarkers.length) {
-      const addedCount = docs.length;
-      await notifications.insertMany(
-        bookmarkers.map((b) => ({
-          userId: b.userId,
-          type: "chapter_update" as const,
-          payload: {
-            message: `${novel.title} · ${addedCount} new chapter${addedCount > 1 ? "s" : ""} released`,
-            link: `/novel/${novel.slug}`,
-          },
-          isRead: false,
-          createdAt: now,
-        }))
+      const allowedUserIds = await filterUsersByNotificationPref(
+        bookmarkers.map((b) => b.userId),
+        "chapter_update"
       );
+      const addedCount = docs.length;
+      if (allowedUserIds.length) {
+        await notifications.insertMany(
+          allowedUserIds.map((uid) => ({
+            userId: uid,
+            type: "chapter_update" as const,
+            payload: {
+              // novelId, not a copied cover URL — the cover is looked up
+              // live via this reference when notifications are read, so it
+              // always reflects the novel's current cover and never goes
+              // stale if the cover is changed later.
+              novelId: novel._id,
+              message: `${novel.title} · ${addedCount} new chapter${addedCount > 1 ? "s" : ""} released`,
+              link: `/novel/${novel.slug}`,
+            },
+            isRead: false,
+            createdAt: now,
+          }))
+        );
+      }
     }
 
     return NextResponse.json({ ok: true, added: docs.length, totalChapters });

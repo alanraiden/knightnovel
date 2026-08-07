@@ -68,15 +68,16 @@ export function HeroCarousel({ novels }: { novels: DemoNovel[] }) {
                 hasCustomBackground ? "object-[70%_center]" : "object-[center_15%]"
               )}
             />
-            {/* Sharp, fully visible art — legibility now comes from the glass
-                content panel itself (backdrop-blur + semi-opaque fill), not
-                from darkening the background. Just a light bottom fade so
-                the arrows/dots stay readable at the edges. */}
+            {/* Sharp, fully visible art. A moderate left-side gradient keeps the
+                title/description readable without blurring anything — the
+                stat cards further right have their own small glass panels
+                and don't need the backdrop dimmed for them. */}
+            <div className="absolute inset-0 bg-gradient-to-r from-base/85 via-base/30 to-transparent md:w-2/3" />
             <div className="absolute inset-0 bg-gradient-to-t from-base/50 via-transparent to-transparent" />
           </div>
         )}
 
-        <div className="glass relative m-3 flex flex-col gap-5 rounded-card p-6 md:min-h-[420px] md:flex-row md:items-center md:gap-8 md:p-10">
+        <div className="relative m-3 flex flex-col gap-5 rounded-card p-6 md:min-h-[420px] md:flex-row md:items-center md:gap-8 md:p-10">
           {novel.cover && (
             <div className="relative hidden h-40 w-28 shrink-0 overflow-hidden rounded-card shadow-2xl sm:block md:h-64 md:w-44">
               <Image src={novel.cover} alt={novel.title} fill sizes="176px" className="object-cover" />

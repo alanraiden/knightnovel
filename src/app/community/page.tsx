@@ -8,6 +8,7 @@ import {
   getAllNovels,
 } from "@/lib/queries";
 import { CommunityClient } from "@/components/community/community-client";
+import { AdSlot } from "@/components/ads/ad-slot";
 
 export function generateMetadata({ searchParams }: { searchParams: { thread?: string } }): Metadata {
   return {
@@ -34,6 +35,9 @@ export default async function CommunityPage() {
       mostActiveNovels={mostActiveNovels}
       trendingNovels={trendingNovels}
       novels={novels}
+      topAd={<AdSlot page="community" position="top" />}
+      middleAd={<AdSlot page="community" position="middle" />}
+      bottomAd={<AdSlot page="community" position="bottom" />}
     />
   );
 }

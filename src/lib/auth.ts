@@ -48,10 +48,19 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       if (user) {
         token.role = (user as any).role ?? "user";
         token.id = (user as any).id;
+      }
+      // Lets client code call useSession().update({ image, name }) right
+      // after an avatar upload or profile edit and have it reflected
+      // immediately, instead of only picking up changes on next login.
+      if (trigger === "update" && session?.image) {
+        token.picture = session.image;
+      }
+      if (trigger === "update" && session?.name) {
+        token.name = session.name;
       }
       return token;
     },
@@ -59,6 +68,8 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         (session.user as any).role = token.role ?? "user";
         (session.user as any).id = token.id;
+        if (token.picture) session.user.image = token.picture as string;
+        if (token.name) session.user.name = token.name as string;
       }
       return session;
     },

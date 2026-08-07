@@ -11,8 +11,11 @@ const links = [
   { href: "/admin/featured", label: "Featured" },
   { href: "/admin/moderation", label: "Moderation" },
   { href: "/admin/ghost-comments", label: "Ghost Comments" },
+  { href: "/admin/ghost-discussions", label: "Ghost Discussions" },
   { href: "/admin/announcements", label: "Announcements" },
   { href: "/admin/analytics", label: "Analytics" },
+  { href: "/admin/settings", label: "Settings" },
+  { href: "/admin/monetization", label: "Monetization" },
 ];
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {

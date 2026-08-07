@@ -2,13 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useSession } from "next-auth/react";
 import { Bell } from "lucide-react";
 import { timeAgo } from "@/lib/utils";
 
 interface NotificationItem {
   id: string;
-  type: "reply" | "chapter_update" | "announcement";
+  type: "reply" | "mention" | "chapter_update" | "announcement";
   text?: string;
   originalComment?: string;
   replyAuthor?: string;
@@ -16,6 +17,7 @@ interface NotificationItem {
   createdAt: string;
   link?: string;
   isRead: boolean;
+  thumbnailUrl?: string;
 }
 
 export function NotificationWindow({ initialUnreadCount }: { initialUnreadCount: number }) {
@@ -81,24 +83,33 @@ export function NotificationWindow({ initialUnreadCount }: { initialUnreadCount:
                   key={n.id}
                   href={n.link || "#"}
                   onClick={() => setOpen(false)}
-                  className="block rounded-card bg-card/60 p-2.5 text-xs hover:bg-card"
+                  className="flex items-start gap-2.5 rounded-card bg-card/60 p-2.5 text-xs hover:bg-card"
                 >
-                  {n.type === "reply" ? (
-                    <div>
-                      {n.originalComment && (
-                        <>
-                          <p className="text-text-muted">You commented:</p>
-                          <p className="text-text-secondary">&quot;{n.originalComment}&quot;</p>
-                          <div className="my-1.5 border-t border-border/60" />
-                        </>
-                      )}
-                      <p className="text-text-muted">{n.replyAuthor} replied:</p>
-                      <p className="text-text-primary">&quot;{n.replyBody}&quot;</p>
-                    </div>
-                  ) : (
-                    <p className="text-text-secondary">{n.text}</p>
+                  {n.type === "chapter_update" && n.thumbnailUrl && (
+                    <span className="relative h-9 w-9 shrink-0 overflow-hidden rounded">
+                      <Image src={n.thumbnailUrl} alt="" fill sizes="36px" className="object-cover" />
+                    </span>
                   )}
-                  <p className="mt-1.5 text-[10px] text-text-disabled">{timeAgo(n.createdAt)}</p>
+                  <div className="min-w-0 flex-1">
+                    {n.type === "reply" || n.type === "mention" ? (
+                      <div>
+                        {n.type === "reply" && n.originalComment && (
+                          <>
+                            <p className="text-text-muted">You commented:</p>
+                            <p className="text-text-secondary">&quot;{n.originalComment}&quot;</p>
+                            <div className="my-1.5 border-t border-border/60" />
+                          </>
+                        )}
+                        <p className="text-text-muted">
+                          {n.replyAuthor} {n.type === "mention" ? "mentioned you:" : "replied:"}
+                        </p>
+                        <p className="text-text-primary">&quot;{n.replyBody}&quot;</p>
+                      </div>
+                    ) : (
+                      <p className="text-text-secondary">{n.text}</p>
+                    )}
+                    <p className="mt-1.5 text-[10px] text-text-disabled">{timeAgo(n.createdAt)}</p>
+                  </div>
                 </Link>
               ))
             )}

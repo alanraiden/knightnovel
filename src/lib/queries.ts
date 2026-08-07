@@ -171,6 +171,7 @@ export async function getChapterContent(
 export interface CommentView {
   id: string;
   author: string;
+  authorId?: string;
   body: string;
   up: number;
   down: number;
@@ -182,12 +183,14 @@ export interface CommentView {
   isPinned?: boolean;
   isLocked?: boolean;
   createdAt?: string;
+  editedAt?: string;
 }
 
 function fromMongoComment(doc: CommentDoc & { _id: ObjectId }): CommentView {
   return {
     id: doc._id.toString(),
     author: doc.displayName,
+    authorId: doc.authorId ? doc.authorId.toString() : undefined,
     body: doc.body,
     up: doc.votes?.up ?? 0,
     down: doc.votes?.down ?? 0,
@@ -199,6 +202,7 @@ function fromMongoComment(doc: CommentDoc & { _id: ObjectId }): CommentView {
     isPinned: doc.isPinned,
     isLocked: doc.isLocked,
     createdAt: doc.createdAt.toISOString(),
+    editedAt: doc.editedAt ? doc.editedAt.toISOString() : undefined,
   };
 }
 
@@ -493,7 +497,7 @@ export interface ChapterListItem {
 
 export interface NotificationView {
   id: string;
-  type: "reply" | "chapter_update" | "announcement";
+  type: "reply" | "mention" | "chapter_update" | "announcement";
   text?: string;
   originalComment?: string;
   replyAuthor?: string;
@@ -501,6 +505,7 @@ export interface NotificationView {
   createdAt: string;
   link?: string;
   isRead: boolean;
+  thumbnailUrl?: string; // chapter_update only — the novel's own cover, joined live at read time
 }
 
 // Cheap, separate from getNotificationsForUser so the navbar can show a
@@ -532,7 +537,7 @@ export async function markNotificationsRead(userId: string): Promise<void> {
 export async function getNotificationsForUser(userId: string, limit = 20): Promise<NotificationView[]> {
   if (!hasDb()) return [];
   try {
-    const { notifications, comments, announcements } = await collections();
+    const { notifications, comments, announcements, novels } = await collections();
 
     const userNotifs = await notifications
       .find({ userId: new ObjectId(userId) })
@@ -554,7 +559,25 @@ export async function getNotificationsForUser(userId: string, limit = 20): Promi
           link: n.payload.link,
           isRead: Boolean(n.isRead),
         });
+      } else if (n.type === "mention") {
+        results.push({
+          id: n._id!.toString(),
+          type: "mention",
+          replyAuthor: n.payload?.replyAuthor,
+          replyBody: n.payload?.message,
+          createdAt: n.createdAt.toISOString(),
+          link: n.payload?.link,
+          isRead: Boolean(n.isRead),
+        });
       } else if (n.type === "chapter_update") {
+        let thumbnailUrl: string | undefined;
+        if (n.payload?.novelId) {
+          const novel = await novels.findOne(
+            { _id: n.payload.novelId },
+            { projection: { cover: 1 } }
+          );
+          thumbnailUrl = novel?.cover;
+        }
         results.push({
           id: n._id!.toString(),
           type: "chapter_update",
@@ -562,6 +585,7 @@ export async function getNotificationsForUser(userId: string, limit = 20): Promi
           createdAt: n.createdAt.toISOString(),
           link: n.payload?.link,
           isRead: Boolean(n.isRead),
+          thumbnailUrl,
         });
       }
     }
@@ -972,4 +996,137 @@ export async function getRecentCommunityActivity(limit = 4) {
     }
   }
   return demoComments;
+}
+
+// Site-wide settings — currently just the logo, stored as a single document
+// so it's trivial to add more site-wide fields (favicon, seasonal theme,
+// etc.) later without a schema change.
+export async function getSiteLogoUrl(): Promise<string | null> {
+  if (!hasDb()) return null;
+  try {
+    const { settings } = await collections();
+    const doc = await settings.findOne({ _id: "site" as unknown as ObjectId });
+    return doc?.logoUrl ?? null;
+  } catch (err) {
+    console.error("[queries] getSiteLogoUrl — falling back to default logo:", err);
+    return null;
+  }
+}
+
+export async function setSiteLogoUrl(url: string | null): Promise<void> {
+  const { settings } = await collections();
+  await settings.updateOne(
+    { _id: "site" as unknown as ObjectId },
+    { $set: { logoUrl: url } },
+    { upsert: true }
+  );
+}
+
+// Monetization / ad settings — one document in the same `settings`
+// collection as the site logo, keyed by _id. Kept deliberately generic
+// (just enabled flags) so a real ad network can be wired in later without
+// touching page layouts — see AdSlot.
+export interface AdSettings {
+  enabled: boolean;
+  pageTypes: { chapter: boolean; novel: boolean; community: boolean };
+  positions: { top: boolean; middle: boolean; bottom: boolean };
+}
+
+const DEFAULT_AD_SETTINGS: AdSettings = {
+  enabled: false,
+  pageTypes: { chapter: true, novel: true, community: true },
+  positions: { top: true, middle: true, bottom: true },
+};
+
+export async function getAdSettings(): Promise<AdSettings> {
+  if (!hasDb()) return DEFAULT_AD_SETTINGS;
+  try {
+    const { settings } = await collections();
+    const doc = await settings.findOne({ _id: "ads" as unknown as ObjectId });
+    if (!doc) return DEFAULT_AD_SETTINGS;
+    return {
+      enabled: Boolean(doc.enabled),
+      pageTypes: { ...DEFAULT_AD_SETTINGS.pageTypes, ...doc.pageTypes },
+      positions: { ...DEFAULT_AD_SETTINGS.positions, ...doc.positions },
+    };
+  } catch (err) {
+    console.error("[queries] getAdSettings — falling back to defaults (ads off):", err);
+    return DEFAULT_AD_SETTINGS;
+  }
+}
+
+export async function setAdSettings(settings: AdSettings): Promise<void> {
+  const { settings: col } = await collections();
+  await col.updateOne({ _id: "ads" as unknown as ObjectId }, { $set: settings }, { upsert: true });
+}
+
+// Editable profile fields (display name, bio, favorite genre) — kept
+// separate from getDashboardData since this is specifically what the
+// profile edit form reads/writes.
+export interface EditableProfile {
+  displayName: string;
+  bio: string;
+  favoriteGenre: string;
+}
+
+export async function getEditableProfile(userId: string): Promise<EditableProfile | null> {
+  if (!hasDb()) return null;
+  try {
+    const { users } = await collections();
+    const user = await users.findOne({ _id: new ObjectId(userId) });
+    if (!user) return null;
+    return {
+      displayName: user.displayName ?? "",
+      bio: user.bio ?? "",
+      favoriteGenre: user.favoriteGenre ?? "",
+    };
+  } catch (err) {
+    console.error("[queries] getEditableProfile:", err);
+    return null;
+  }
+}
+
+export type NotificationSettings = { reply: boolean; mention: boolean; chapter_update: boolean; announcement: boolean };
+
+const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
+  reply: true,
+  mention: true,
+  chapter_update: true,
+  announcement: true,
+};
+
+export async function getNotificationSettings(userId: string): Promise<NotificationSettings> {
+  if (!hasDb()) return DEFAULT_NOTIFICATION_SETTINGS;
+  try {
+    const { users } = await collections();
+    const user = await users.findOne({ _id: new ObjectId(userId) });
+    return { ...DEFAULT_NOTIFICATION_SETTINGS, ...user?.notificationSettings };
+  } catch (err) {
+    console.error("[queries] getNotificationSettings — defaulting to all on:", err);
+    return DEFAULT_NOTIFICATION_SETTINGS;
+  }
+}
+
+// Filters a list of user ids down to the ones who haven't opted out of a
+// given notification type — missing/never-set preferences default to "on"
+// so this never silently stops notifying people who've never touched the
+// setting.
+export async function filterUsersByNotificationPref(
+  userIds: ObjectId[],
+  type: keyof NotificationSettings
+): Promise<ObjectId[]> {
+  if (!userIds.length) return [];
+  if (!hasDb()) return userIds;
+  try {
+    const { users } = await collections();
+    const optedOut = await users
+      .find({ _id: { $in: userIds }, [`notificationSettings.${type}`]: false })
+      .project({ _id: 1 })
+      .toArray();
+    const optedOutIds = new Set(optedOut.map((u) => u._id.toString()));
+    return userIds.filter((id) => !optedOutIds.has(id.toString()));
+  } catch (err) {
+    console.error("[queries] filterUsersByNotificationPref — notifying everyone:", err);
+    return userIds;
+  }
 }

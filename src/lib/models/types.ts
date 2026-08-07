@@ -62,12 +62,14 @@ export interface User {
   googleId?: string;
   displayName: string;
   avatarUrl?: string;
-  bio?: string;
+  bio?: string; // max 100 chars, enforced at the API layer
+  favoriteGenre?: string; // one of GENRES, from src/lib/genres.ts
   role: "user" | "moderator" | "admin";
   createdAt: Date;
   lastActiveAt: Date;
   stats: { chaptersRead: number; favoritesCount: number; commentsCount: number };
   settings: { theme: "light" | "dark" | "sepia"; fontSize: number; fontFamily: string; lineHeight: number };
+  notificationSettings?: { reply: boolean; mention: boolean; chapter_update: boolean; announcement: boolean };
   status: "active" | "banned" | "suspended";
 }
 
@@ -125,6 +127,7 @@ export interface Comment {
   status: "visible" | "hidden" | "removed";
   createdAt: Date;
   updatedAt: Date;
+  editedAt?: Date; // set only when the author edits the body after posting
   // Admin-only fields — must be stripped from any public API response.
   isGhost?: boolean;
   ghostCreatedBy?: ObjectId;
