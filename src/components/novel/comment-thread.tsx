@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useSession } from "next-auth/react";
 import { ThumbsUp, ThumbsDown, MessageCircle, Flag, Eye, Image as ImageIcon, Loader2, Pencil, Check, X } from "lucide-react";
 import { ReportModal } from "@/components/shared/report-modal";
-import { AutoResizeTextarea } from "@/components/shared/auto-resize-textarea";
+import { EditableComposer } from "@/components/shared/editable-composer";
 import { cn, timeAgo } from "@/lib/utils";
 import type { CommentView, CommentSort } from "@/lib/queries";
 
@@ -190,15 +190,13 @@ export function CommentComposer({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [posting, setPosting] = useState(false);
 
-  const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const uploadImageFile = async (file: File) => {
     if (!file.type.startsWith("image/")) {
       setUploadError("Please choose an image file.");
       return;
     }
     if (file.size > 2 * 1024 * 1024) {
-      setUploadError("Stickers must be under 2MB.");
+      setUploadError("Images must be under 2MB.");
       return;
     }
 
@@ -219,6 +217,12 @@ export function CommentComposer({
     } finally {
       setUploading(false);
     }
+  };
+
+  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file
+    if (file) uploadImageFile(file);
   };
 
   const removeSticker = () => {
@@ -270,12 +274,13 @@ export function CommentComposer({
 
   return (
     <div className={compact ? "" : "rounded-card border border-border bg-surface p-3"}>
-      <AutoResizeTextarea
+      <EditableComposer
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onValueChange={setText}
+        onImagePaste={uploadImageFile}
         placeholder={compact ? "Write a reply…" : "Join the discussion…"}
         rows={5}
-        className="w-full rounded border border-border bg-card px-2.5 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none"
+        className="w-full rounded border border-border bg-card px-2.5 py-2 text-sm text-text-primary"
       />
 
       {stickerPreview && (
@@ -300,7 +305,7 @@ export function CommentComposer({
       <div className="mt-2 flex items-center justify-between">
         <label className="flex cursor-pointer items-center gap-1.5 text-xs text-text-secondary hover:text-text-primary">
           <ImageIcon size={14} />
-          Upload sticker
+          Upload image
           <input type="file" accept="image/*" onChange={onFileChange} className="hidden" />
         </label>
         <div className="flex gap-2">
@@ -435,11 +440,11 @@ export function CommentItem({
           </button>
         ) : editing ? (
           <div>
-            <AutoResizeTextarea
+            <EditableComposer
               value={editBody}
-              onChange={(e) => setEditBody(e.target.value)}
+              onValueChange={setEditBody}
               rows={3}
-              className="w-full rounded border border-border bg-card px-2.5 py-2 text-sm text-text-primary focus:outline-none"
+              className="w-full rounded border border-border bg-card px-2.5 py-2 text-sm text-text-primary"
             />
             {editError && <p className="mt-1 text-xs text-status-error">{editError}</p>}
             <div className="mt-1.5 flex gap-2">
