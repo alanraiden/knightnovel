@@ -1,53 +1,68 @@
-# Changes — Mobile keyboard sticker/GIF support, "Upload image" rename
+# Changes — Server-side image optimization for uploads
 
-## Root cause of "this app does not support image here"
-This is a Gboard-specific check, not a bug in the upload logic itself: Gboard
-only offers its sticker/GIF picker to elements it considers rich input
-targets, and it checks whether the *focused DOM element* is `contenteditable`
-before it'll hand over image content at all. A plain `<textarea>`/`<input>`
-fails that check immediately, which is exactly the error message you saw.
+Went with your spec as-is — it was already the right approach, nothing I'd
+do differently. Used `sharp` (industry-standard, fast, native bindings) for
+the actual processing since Node doesn't have this built in.
 
-## Fix — new `EditableComposer` (`src/components/shared/editable-composer.tsx`)
-Replaces the plain `<textarea>` with a real `contenteditable` div, which is
-what actually makes Gboard's sticker/GIF picker available in the keyboard.
-On top of that:
-- **Paste handling** — when Gboard hands over a picked sticker/GIF, it
-  arrives as image data in the paste event. The composer checks for that
-  first: if found, it's intercepted and handed to the exact same upload
-  path (`/api/uploads/sticker`, R2-backed) your file-picker button already
-  used — no separate/duplicate upload logic.
-- **Plain text stays plain text** — pasting regular text (from anywhere,
-  not just Gboard) is forced to plain text, not rich HTML, so comments
-  can't accidentally pick up formatting from a copied webpage or doc.
-- Multi-line typing, placeholder text, and the growing-box behavior your
-  old `AutoResizeTextarea` had are all preserved.
+## `src/app/api/uploads/sticker/route.ts` — full rewrite
 
-Wired into both the comment/reply composer and the edit-comment box in
-`comment-thread.tsx`. Refactored the upload logic into one shared
-`uploadImageFile()` function so the file-picker button and paste-from-
-keyboard both go through identical code — nothing duplicated.
+- **Input cap raised to 5MB** (was 2MB) — this is just the ceiling on what
+  we'll accept before processing; the *stored* file ends up far smaller
+  regardless of what comes in.
+- **Authoritative validation**: the file is parsed with `sharp` and checked
+  against its *actual* decoded format, not the client-supplied MIME type or
+  filename extension — so a corrupt file, a non-image renamed to `.jpg`, or
+  an unsupported format (anything but JPEG/PNG/WebP/GIF) gets rejected with
+  a clear error before any processing or upload happens. SVG is deliberately
+  excluded — it can embed scripts, not worth the risk for this feature.
+- **Resize**: longest edge capped at 512px, aspect ratio preserved
+  (`fit: "inside"`), and — important detail — small images are never
+  upscaled (`withoutEnlargement: true`), so a 100×50 sticker stays 100×50
+  instead of getting blown up and blurry.
+- **Convert to WebP at quality 80.**
+- **Transparency preserved** — WebP supports alpha natively and sharp
+  carries it straight through resize/encode without any extra handling
+  needed; verified this with a synthetic transparent PNG (see below).
+- **Animated GIFs stay animated** — one thing I did slightly differently
+  than a literal reading of "convert to WebP": rather than collapsing an
+  animated GIF to a single static frame (which sharp does by default unless
+  told otherwise), multi-frame input is detected and re-encoded as an
+  *animated* WebP, so a GIF someone pastes doesn't silently stop moving.
+  Say the word if you'd rather keep it simpler and always output static.
+- **Only the optimized buffer is ever uploaded** — the original
+  full-resolution bytes are held in memory just long enough to process,
+  then discarded; nothing full-res ever touches R2.
 
-`AutoResizeTextarea` (the old component) is now unused since
-`comment-thread.tsx` was its only caller — left the file in place rather
-than deleting it, in case you want it for something else later, but nothing
-references it anymore.
-
-## Button renamed
-"Upload sticker" → "Upload image", as asked. Same button, same upload path,
-just the label.
+## `src/components/novel/comment-thread.tsx`
+- Client-side size check bumped to match (5MB) — cosmetic only, the server
+  is what actually enforces it regardless of what the client checks.
+- **Display fixed to match your requirement**: both the compose-time
+  preview and the posted image were being force-cropped to a 64×64 square
+  (`object-cover`). Changed both to `object-contain` with a max-size box
+  instead (140×96 for the preview, 220×192 for posted images) — shows the
+  whole image at its real aspect ratio, never crops, and won't blow up
+  past those caps regardless of the source image's shape.
 
 ### Verified
 - `npx next build` — compiles clean.
-- `next start` + `curl`: novel page returns 200, confirmed `contentEditable`
-  markup and the "Upload image" label are both present in the rendered
-  HTML, and the old "Upload sticker" text is gone.
-- Couldn't test the actual Gboard sticker picker itself from this sandbox
-  (needs a real Android device) — the fix targets the exact documented
-  cause of that error (contenteditable requirement) and the paste-handling
-  code follows the standard pattern other sites use for this, but flagging
-  that the very last mile — an actual phone tapping an actual sticker —
-  wasn't something I could click through myself here.
+- **Actually ran the resize/convert/alpha pipeline**, not just checked that
+  it compiles — generated a synthetic 1200×600 semi-transparent PNG,
+  ran it through the exact same code path as the route:
+  - Output: 512×256 WebP (aspect ratio held exactly, longest edge hit 512
+    precisely) with alpha still intact.
+  - Confirmed a 100×50 input stays 100×50 (no upscaling).
+  - Confirmed genuinely invalid/corrupt bytes throw and get rejected rather
+    than silently producing garbage output.
+- `next start` + `curl`: novel page returns 200; posted to the upload route
+  directly and got back the expected "not configured" error (no R2 creds
+  in this sandbox) — confirms the route's logic runs cleanly up through the
+  config check.
+- Didn't have real R2 credentials in this sandbox to test an actual
+  end-to-end upload landing in a bucket, but the upload call itself is
+  unchanged from what was already working for you — only what gets fed
+  into it changed.
 
 ### Not touched
-Everything else in the file — voting, replies, spoilers, report modal, the
-edit/mention/timestamp features from earlier.
+Cover uploads, hero background uploads, avatar uploads, or the logo upload
+— none of those went through this route, so none of them are affected by
+this change (they're on Cloudinary via a different route entirely).

@@ -195,8 +195,8 @@ export function CommentComposer({
       setUploadError("Please choose an image file.");
       return;
     }
-    if (file.size > 2 * 1024 * 1024) {
-      setUploadError("Images must be under 2MB.");
+    if (file.size > 5 * 1024 * 1024) {
+      setUploadError("Images must be under 5MB.");
       return;
     }
 
@@ -285,7 +285,11 @@ export function CommentComposer({
 
       {stickerPreview && (
         <div className="relative mt-2 w-fit">
-          <img src={stickerPreview} alt="Sticker preview" className="h-16 w-16 rounded object-cover" />
+          <img
+            src={stickerPreview}
+            alt="Image preview"
+            className="max-h-24 max-w-[140px] rounded border border-border object-contain"
+          />
           {uploading && (
             <div className="absolute inset-0 flex items-center justify-center rounded bg-base/60">
               <Loader2 size={16} className="animate-spin text-text-primary" />
@@ -476,7 +480,11 @@ export function CommentItem({
               </button>
             )}
             {comment.stickerUrl && (
-              <img src={comment.stickerUrl} alt="Sticker" className="mt-2 h-16 w-16 rounded object-cover" />
+              <img
+                src={comment.stickerUrl}
+                alt="Attached image"
+                className="mt-2 max-h-48 max-w-[220px] rounded border border-border object-contain"
+              />
             )}
           </>
         )}
