@@ -1,17 +1,32 @@
 import type { MetadataRoute } from "next";
-import { getAllNovels, getAllChaptersForSitemap } from "@/lib/queries";
+import { getNovelsForSitemap, getAllChaptersForSitemap } from "@/lib/queries";
+
+// force-dynamic + revalidate=0: never let Next.js cache this route.
+// Without these, the App Router may serve a stale, build-time-generated
+// sitemap.xml even after novels or chapters have been hard-deleted from
+// MongoDB — causing invalid URLs like /novel/shadow-slave/chapter/9999 to
+// persist until the next full redeployment.
+//
+// With force-dynamic every request to /sitemap.xml runs the sitemap()
+// function live against the database, so the sitemap always matches the
+// current state of the collection with no manual intervention required.
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://knightnovel.com";
 
 // Fully dynamic — pulls every novel and every published chapter straight
-// from MongoDB (with the usual demo-data fallback when no DB is
-// configured), so new novels/chapters show up here automatically with no
-// manual edits. If the catalog grows very large (tens of thousands of
-// chapters), split this into a sitemap index via Next's `generateSitemaps`
-// API — noted here rather than built now since it adds real complexity
-// this catalog doesn't need yet.
+// from MongoDB. New novels/chapters show up here automatically and deleted
+// ones disappear immediately on the next request — no manual edits or
+// redeployments needed. If the catalog grows very large (tens of thousands
+// of chapters), split this into a sitemap index via Next's `generateSitemaps`
+// API — noted here rather than built now since it adds real complexity this
+// catalog doesn't need yet.
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const [novels, chapters] = await Promise.all([getAllNovels(), getAllChaptersForSitemap()]);
+  const [novels, chapters] = await Promise.all([
+    getNovelsForSitemap(),
+    getAllChaptersForSitemap(),
+  ]);
 
   const staticPages: MetadataRoute.Sitemap = [
     { url: `${siteUrl}/`, changeFrequency: "hourly", priority: 1 },

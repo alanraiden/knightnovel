@@ -837,28 +837,93 @@ export async function getFeaturedSlugs(): Promise<string[]> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Sitemap-only queries
+// These are intentionally separate from the UI-facing getAllNovels() /
+// getChapter*() queries so that sitemap-specific visibility rules (e.g.
+// noIndex flag, draft status, soft-delete) live in one place and never
+// accidentally bleed into the public UI — and vice-versa.
+// ---------------------------------------------------------------------------
+
+export interface NovelSitemapEntry {
+  slug: string;
+  lastChapterAddedAt: string;
+}
+
+/**
+ * Returns every novel that should appear in /sitemap.xml.
+ *
+ * Filter rules (add new exclusions here, not in getAllNovels):
+ *   - The app uses hard deletes (novels.deleteOne), so deleted novels are
+ *     simply absent from the collection — no extra filter needed today.
+ *   - If a `isNoIndex` or `isDraft` field is added to the Novel schema in
+ *     the future, exclude it here: { isNoIndex: { $ne: true }, isDraft: { $ne: true } }
+ */
+export async function getNovelsForSitemap(): Promise<NovelSitemapEntry[]> {
+  if (!hasDb()) return [];
+  try {
+    const { novels } = await collections();
+    // Projection: only the two fields the sitemap needs — keeps the payload small.
+    const docs = await novels
+      .find({}, { projection: { slug: 1, lastChapterAddedAt: 1 } })
+      .toArray();
+    return docs.map((d) => ({
+      slug: d.slug,
+      lastChapterAddedAt: (d.lastChapterAddedAt ?? d.createdAt ?? new Date()).toISOString(),
+    }));
+  } catch (err) {
+    console.error("[queries] getNovelsForSitemap — returning empty list:", err);
+    return [];
+  }
+}
+
 export interface ChapterSitemapEntry {
   novelSlug: string;
   chapterNumber: number;
   updatedAt: string;
 }
 
+/**
+ * Returns every chapter that should appear in /sitemap.xml.
+ *
+ * Filter rules (add new exclusions here):
+ *   - chapters.status must be "published" — drafts are never indexed.
+ *   - The chapter's parent novel must still exist in the collection.
+ *     Because the app uses hard deletes, a chapter whose novelId no longer
+ *     resolves in slugById is an orphan (e.g. chapters.deleteMany failed
+ *     mid-transaction) and is silently dropped from the sitemap.
+ */
 export async function getAllChaptersForSitemap(): Promise<ChapterSitemapEntry[]> {
   if (!hasDb()) return [];
   try {
     const { chapters, novels } = await collections();
-    const novelDocs = await novels.find({}, { projection: { slug: 1 } }).toArray();
+
+    // Build slug lookup from currently-existing novels only.
+    // Any chapter whose novelId is not in this map belongs to a deleted
+    // (or otherwise absent) novel and must not appear in the sitemap.
+    const novelDocs = await novels
+      .find({}, { projection: { slug: 1 } })
+      .toArray();
     const slugById = new Map(novelDocs.map((n) => [n._id!.toString(), n.slug]));
 
+    // Only published chapters — drafts are never indexed.
     const chapterDocs = await chapters
-      .find({ status: "published" }, { projection: { novelId: 1, chapterNumber: 1, updatedAt: 1 } })
+      .find(
+        { status: "published" },
+        { projection: { novelId: 1, chapterNumber: 1, updatedAt: 1 } }
+      )
       .toArray();
 
     return chapterDocs
       .map((c) => {
         const novelSlug = slugById.get(c.novelId.toString());
+        // Drop orphaned chapters (parent novel was deleted).
         if (!novelSlug) return null;
-        return { novelSlug, chapterNumber: c.chapterNumber, updatedAt: c.updatedAt.toISOString() };
+        return {
+          novelSlug,
+          chapterNumber: c.chapterNumber,
+          updatedAt: c.updatedAt.toISOString(),
+        };
       })
       .filter((c): c is ChapterSitemapEntry => c !== null);
   } catch (err) {
