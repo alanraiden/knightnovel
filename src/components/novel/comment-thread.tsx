@@ -473,7 +473,7 @@ export function CommentItem({
           </div>
         ) : (
           <>
-            {comment.body && <p className="text-sm text-text-secondary">{renderWithMentions(displayBody)}</p>}
+            {comment.body && <p className="whitespace-pre-line text-sm text-text-secondary">{renderWithMentions(displayBody)}</p>}
             {isLong && (
               <button onClick={() => setExpanded((v) => !v)} className="mt-1 text-xs text-accent">
                 {expanded ? "Show less" : "Read more"}
