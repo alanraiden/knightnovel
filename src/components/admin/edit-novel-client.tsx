@@ -81,7 +81,7 @@ export function EditNovelClient({ novel }: { novel: NovelView }) {
     try {
       const res = await fetch(`/api/admin/novels/${novel.slug}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete.");
-      router.push("/admin/novels");
+      router.push("/kn-x9b4/novels");
     } catch (err) {
       setMessage({ type: "error", text: err instanceof Error ? err.message : "Failed to delete." });
       setDeleting(false);

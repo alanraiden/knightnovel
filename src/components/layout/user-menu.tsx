@@ -64,7 +64,7 @@ export function UserMenu() {
           </Link>
           {role === "admin" && (
             <Link
-              href="/admin"
+              href="/kn-x9b4"
               onClick={() => setOpen(false)}
               className="block rounded px-2.5 py-1.5 text-xs text-text-secondary hover:bg-card/60 hover:text-text-primary"
             >

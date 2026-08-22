@@ -33,7 +33,7 @@ export default async function AdminNovelsPage() {
                   </div>
                 </td>
                 <td className="px-3 py-2">
-                  <Link href={`/admin/novels/${n.slug}/edit`} className="text-text-primary hover:text-accent-highlight">
+                  <Link href={`/kn-x9b4/novels/${n.slug}/edit`} className="text-text-primary hover:text-accent-highlight">
                     {n.title}
                   </Link>
                 </td>
@@ -41,7 +41,7 @@ export default async function AdminNovelsPage() {
                 <td className="px-3 py-2 text-text-secondary">{n.chapterCount}</td>
                 <td className="px-3 py-2 text-accent-highlight">★ {n.rating}</td>
                 <td className="px-3 py-2">
-                  <Link href={`/admin/novels/${n.slug}/chapters`} className="text-xs text-accent-highlight">
+                  <Link href={`/kn-x9b4/novels/${n.slug}/chapters`} className="text-xs text-accent-highlight">
                     Manage chapters →
                   </Link>
                 </td>

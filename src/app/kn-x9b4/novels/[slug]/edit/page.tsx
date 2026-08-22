@@ -11,7 +11,7 @@ export default async function EditNovelPage({ params }: { params: { slug: string
     <div>
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-lg font-medium text-text-primary">Edit — {novel.title}</h1>
-        <Link href={`/admin/novels/${novel.slug}/chapters`} className="text-xs text-accent">
+        <Link href={`/kn-x9b4/novels/${novel.slug}/chapters`} className="text-xs text-accent">
           Manage chapters →
         </Link>
       </div>

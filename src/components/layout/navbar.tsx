@@ -27,8 +27,8 @@ export async function Navbar() {
         <div className="flex items-center gap-8">
           <Link href="/" className="flex items-center gap-2 text-[15px] font-medium text-text-primary">
             {logoUrl ? (
-              <span className="relative h-[22px] w-[22px]">
-                <Image src={logoUrl} alt="" fill sizes="22px" className="object-contain" />
+              <span className="relative h-8 w-8 shrink-0">
+                <Image src={logoUrl} alt="" fill sizes="32px" className="object-contain" />
               </span>
             ) : (
               <ShieldBookMark />
@@ -71,7 +71,7 @@ export async function Navbar() {
 
 function ShieldBookMark() {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path
         d="M12 2 3 5v6c0 5 3.8 8.7 9 11 5.2-2.3 9-6 9-11V5l-9-3Z"
         stroke="#D4A35F"

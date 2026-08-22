@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+  <!-- Dark navy background -->
+  <rect width="24" height="24" rx="5" fill="#0A0F1C"/>
+  <!-- Shield outline -->
+  <path
+    d="M12 2.5 3.5 5.5v5.8c0 4.8 3.6 8.4 8.5 10.5 4.9-2.1 8.5-5.7 8.5-10.5V5.5L12 2.5Z"
+    fill="#1E2D48"
+    stroke="#D4A35F"
+    stroke-width="1.3"
+    stroke-linejoin="round"
+  />
+  <!-- Book lines inside shield -->
+  <path d="M9 9.5h6M9 12.5h6M9 15.5h4" stroke="#D4A35F" stroke-width="1.2" stroke-linecap="round"/>
+</svg>

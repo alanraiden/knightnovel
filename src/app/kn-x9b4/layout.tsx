@@ -6,23 +6,23 @@ import { authOptions } from "@/lib/auth";
 export const metadata = { robots: { index: false, follow: false } };
 
 const links = [
-  { href: "/admin", label: "Overview" },
-  { href: "/admin/novels", label: "Novels" },
-  { href: "/admin/featured", label: "Featured" },
-  { href: "/admin/moderation", label: "Moderation" },
-  { href: "/admin/ghost-comments", label: "Ghost Comments" },
-  { href: "/admin/ghost-discussions", label: "Ghost Discussions" },
-  { href: "/admin/announcements", label: "Announcements" },
-  { href: "/admin/analytics", label: "Analytics" },
-  { href: "/admin/settings", label: "Settings" },
-  { href: "/admin/monetization", label: "Monetization" },
+  { href: "/kn-x9b4", label: "Overview" },
+  { href: "/kn-x9b4/novels", label: "Novels" },
+  { href: "/kn-x9b4/featured", label: "Featured" },
+  { href: "/kn-x9b4/moderation", label: "Moderation" },
+  { href: "/kn-x9b4/ghost-comments", label: "Ghost Comments" },
+  { href: "/kn-x9b4/ghost-discussions", label: "Ghost Discussions" },
+  { href: "/kn-x9b4/announcements", label: "Announcements" },
+  { href: "/kn-x9b4/analytics", label: "Analytics" },
+  { href: "/kn-x9b4/settings", label: "Settings" },
+  { href: "/kn-x9b4/monetization", label: "Monetization" },
 ];
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await getServerSession(authOptions);
   const role = (session?.user as { role?: string } | undefined)?.role;
 
-  if (!session) redirect("/login?callbackUrl=/admin");
+  if (!session) redirect("/login?callbackUrl=/kn-x9b4");
   if (role !== "admin") redirect("/");
 
   return (
