@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { getNovelsForSitemap, getAllChaptersForSitemap } from "@/lib/queries";
+import { getNovelsForSitemap, getAllChaptersForSitemap, getDiscussionsForSitemap } from "@/lib/queries";
 
 // force-dynamic + revalidate=0: never let Next.js cache this route.
 // Without these, the App Router may serve a stale, build-time-generated
@@ -23,9 +23,10 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://knightnovel.com";
 // API — noted here rather than built now since it adds real complexity this
 // catalog doesn't need yet.
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const [novels, chapters] = await Promise.all([
+  const [novels, chapters, discussions] = await Promise.all([
     getNovelsForSitemap(),
     getAllChaptersForSitemap(),
+    getDiscussionsForSitemap(),
   ]);
 
   const staticPages: MetadataRoute.Sitemap = [
@@ -55,5 +56,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.5,
   }));
 
-  return [...staticPages, ...novelPages, ...chapterPages];
+  // Eligible community discussions: visible, root-level, novel-scoped.
+  // Hidden / removed discussions are excluded by getDiscussionsForSitemap.
+  const discussionPages: MetadataRoute.Sitemap = discussions.map((d) => ({
+    url: `${siteUrl}/community/discussion/${d.id}`,
+    lastModified: new Date(d.updatedAt),
+    changeFrequency: "weekly",
+    priority: 0.4,
+  }));
+
+  return [...staticPages, ...novelPages, ...chapterPages, ...discussionPages];
 }

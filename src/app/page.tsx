@@ -61,6 +61,12 @@ export default async function HomePage() {
       {/* eslint-disable-next-line react/no-danger */}
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
+      {/* Semantic page-level H1 for crawlers and assistive tech.
+          The carousel below shows a featured novel title styled as a large
+          heading, but that title rotates and isn't representative of the page.
+          sr-only keeps this invisible without affecting the visual layout. */}
+      <h1 className="sr-only">Knight Novel</h1>
+
       <HeroCarousel novels={featured} />
 
       <section>

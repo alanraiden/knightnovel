@@ -932,6 +932,40 @@ export async function getAllChaptersForSitemap(): Promise<ChapterSitemapEntry[]>
   }
 }
 
+export interface DiscussionSitemapEntry {
+  id: string;
+  updatedAt: string;
+}
+
+/**
+ * Returns every community discussion that should appear in /sitemap.xml.
+ *
+ * Filter rules:
+ *   - parentId must be null   — root-level posts only (not reply comments).
+ *   - status must be "visible" — hidden and removed discussions are excluded.
+ *   - targetType "novel"      — only novel-scoped discussions get their own
+ *     /community/discussion/:id URL (chapter comments use the chapter URL).
+ */
+export async function getDiscussionsForSitemap(): Promise<DiscussionSitemapEntry[]> {
+  if (!hasDb()) return [];
+  try {
+    const { comments } = await collections();
+    const docs = await comments
+      .find(
+        { parentId: null, status: "visible", targetType: "novel" },
+        { projection: { _id: 1, updatedAt: 1, createdAt: 1 } }
+      )
+      .toArray();
+    return docs.map((d) => ({
+      id: d._id.toString(),
+      updatedAt: (d.updatedAt ?? d.createdAt ?? new Date()).toISOString(),
+    }));
+  } catch (err) {
+    console.error("[queries] getDiscussionsForSitemap — returning empty list:", err);
+    return [];
+  }
+}
+
 // Called on every chapter page view. Increments all four counters together
 // since there's no scheduled job (yet) to reset the daily/weekly/monthly
 // windows — they'll functionally track total views until that job exists.

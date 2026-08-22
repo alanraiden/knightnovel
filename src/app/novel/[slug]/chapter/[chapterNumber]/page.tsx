@@ -23,11 +23,14 @@ export async function generateMetadata({
   if (!novel) return {};
   const url = `${siteUrl}/novel/${params.slug}/chapter/${params.chapterNumber}`;
   const title = `Chapter ${params.chapterNumber} — ${novel.title}`;
+  const description = `Read Chapter ${params.chapterNumber} of ${novel.title} by ${novel.author} on Knight Novel.`;
   return {
     title,
+    description,
     alternates: { canonical: url },
     openGraph: {
       title,
+      description,
       type: "article",
       url,
       images: novel.cover ? [{ url: novel.cover }] : undefined,
@@ -81,6 +84,11 @@ export default async function ChapterPage({
     <>
       {/* eslint-disable-next-line react/no-danger */}
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }} />
+      {/* Semantic page-level H1 for crawlers and assistive tech.
+          ReadingShell shows "Chapter N" as a button (chapter picker trigger),
+          not an h1, so without this the chapter page has no H1 in the DOM.
+          sr-only: invisible to sighted users, zero impact on reader UI. */}
+      <h1 className="sr-only">{novel.title} — Chapter {chapterNumber}</h1>
       <ReadingShell
         novel={novel}
         chapterNumber={chapterNumber}

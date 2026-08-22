@@ -20,6 +20,44 @@ export async function generateStaticParams() {
   return slugs.map((slug) => ({ slug }));
 }
 
+// Builds a clean, unique meta description for a novel page.
+// Rules (applied in order):
+//  1. Strip common leading markdown / HTML noise from the raw description.
+//  2. Use the first non-empty paragraph only (descriptions are often multi-paragraph).
+//  3. Trim to a word boundary at ≤ 155 characters and append "…".
+//  4. When the description is absent or too short to be useful, synthesise a
+//     unique fallback from structured fields — guaranteeing every novel page
+//     gets a distinct description even without editorial copy.
+function buildNovelDescription(novel: { title: string; author: string; description: string; genres: string[]; chapterCount: number }): string {
+  const MAX = 155;
+
+  let text = novel.description ?? "";
+
+  // Strip leading markdown/HTML artefacts that sometimes appear in scraped descriptions.
+  text = text
+    .replace(/^#{1,6}\s+/, "")   // # Heading
+    .replace(/^\*{1,2}/, "")     // *bold* or **bold**
+    .replace(/^_{1,2}/, "")      // _italic_
+    .replace(/^<[^>]+>/, "")     // <tag>
+    .trim();
+
+  // Take the first paragraph (split on blank line or \n\n).
+  const firstPara = text.split(/\n\s*\n/)[0].replace(/\n/g, " ").trim();
+
+  if (firstPara.length >= 40) {
+    if (firstPara.length <= MAX) return firstPara;
+    // Trim to word boundary.
+    const cut = firstPara.slice(0, MAX);
+    const lastSpace = cut.lastIndexOf(" ");
+    return (lastSpace > 80 ? cut.slice(0, lastSpace) : cut) + "…";
+  }
+
+  // Unique structured fallback — always distinct per novel.
+  const genre = novel.genres[0] ?? "web novel";
+  const chapters = novel.chapterCount > 0 ? ` — ${novel.chapterCount} chapters` : "";
+  return `Read ${novel.title}${chapters} of ${genre} by ${novel.author} on Knight Novel.`;
+}
+
 export async function generateMetadata({
   params,
 }: {
@@ -28,14 +66,15 @@ export async function generateMetadata({
   const novel = await getNovelBySlug(params.slug);
   if (!novel) return {};
   const url = `${siteUrl}/novel/${novel.slug}`;
+  const description = buildNovelDescription(novel);
   return {
     title: novel.title,
-    description: novel.description || `Read ${novel.title} by ${novel.author} on Knight Novel.`,
+    description,
     keywords: [...novel.genres, ...novel.tags],
     alternates: { canonical: url },
     openGraph: {
       title: novel.title,
-      description: novel.description,
+      description,
       type: "book",
       url,
       images: novel.cover ? [{ url: novel.cover }] : undefined,

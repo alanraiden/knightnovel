@@ -190,7 +190,7 @@ export function DiscussionThreadClient({
                 {root.category}
               </span>
             )}
-            <h1 className="text-xl font-medium text-text-primary">{root.title}</h1>
+            <div className="text-xl font-medium text-text-primary">{root.title}</div>
           </div>
         )}
         <button

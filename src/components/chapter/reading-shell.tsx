@@ -13,8 +13,8 @@ import type { CommentView } from "@/lib/queries";
 type Theme = "dark" | "light" | "sepia";
 
 const fontOptions = [
-  { label: "Serif", value: "Georgia, 'Times New Roman', serif" },
   { label: "Arial", value: "Arial, Helvetica, sans-serif" },
+  { label: "Serif", value: "Georgia, 'Times New Roman', serif" },
   { label: "Verdana", value: "Verdana, Geneva, sans-serif" },
   { label: "Monospace", value: "'Courier New', Courier, monospace" },
 ] as const;

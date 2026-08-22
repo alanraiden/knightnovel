@@ -88,7 +88,7 @@ export function HeroCarousel({ novels }: { novels: DemoNovel[] }) {
             <span className="mb-2 flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-accent-highlight">
               ★ Featured
             </span>
-            <h1 className="max-w-lg text-3xl font-medium text-text-primary md:text-4xl">{novel.title}</h1>
+            <p className="max-w-lg text-3xl font-medium text-text-primary md:text-4xl">{novel.title}</p>
             <div className="mt-3 flex flex-wrap gap-2">
               {novel.genres.map((g) => (
                 <span
@@ -207,9 +207,9 @@ export function HeroCarousel({ novels }: { novels: DemoNovel[] }) {
             <span className="mb-1 flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-accent-highlight">
               ★ Featured
             </span>
-            <h1 className="line-clamp-2 text-lg font-semibold leading-snug text-text-primary">
+            <p className="line-clamp-2 text-lg font-semibold leading-snug text-text-primary">
               {novel.title}
-            </h1>
+            </p>
             <div className="mt-1.5 flex flex-wrap gap-1.5">
               {novel.genres.slice(0, 3).map((g) => (
                 <span key={g} className="rounded bg-base/60 px-1.5 py-0.5 text-[10px] text-text-secondary">
