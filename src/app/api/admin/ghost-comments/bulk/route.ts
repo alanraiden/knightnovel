@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
+import { createHash } from "crypto";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { collections } from "@/lib/db";
@@ -13,6 +14,8 @@ const itemSchema = z.object({
   comment: z.string().min(1).max(2000),
   title: z.string().max(120).optional(),
   category: z.string().max(40).optional(),
+  /** https:// URL from an Image: line in the import format — stored as stickerUrl */
+  imageUrl: z.string().url().optional(),
   createdAt: z.string(),
 });
 
@@ -21,6 +24,18 @@ const bodySchema = z.object({
   chapterId: z.string().optional(),
   items: z.array(itemSchema).min(1),
 });
+
+/** Build a deterministic fingerprint for an import item so we can skip duplicates. */
+function makeImportHash(
+  novelSlug: string,
+  chapterId: string | undefined,
+  item: z.infer<typeof itemSchema>
+): string {
+  // Normalise the date to day-level so re-imports with slight timestamp drift still match.
+  const dateDay = item.createdAt.slice(0, 10);
+  const raw = [novelSlug, chapterId ?? "", item.username, item.comment, dateDay].join("|");
+  return createHash("sha256").update(raw).digest("hex");
+}
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -44,8 +59,20 @@ export async function POST(req: NextRequest) {
     // reply can look up its parent's freshly-assigned real ObjectId.
     const tempIdToRealId = new Map<string, ObjectId>();
     let inserted = 0;
+    let skipped = 0;
 
     for (const item of items) {
+      const importHash = makeImportHash(novelSlug, chapterId, item);
+
+      // Duplicate protection — skip if a comment with this fingerprint already exists.
+      const existing = await comments.findOne({ importHash });
+      if (existing) {
+        // Still track its real _id so child replies can resolve parentId correctly.
+        if (existing._id) tempIdToRealId.set(item.tempId, existing._id);
+        skipped += 1;
+        continue;
+      }
+
       const parentId = item.parentTempId ? tempIdToRealId.get(item.parentTempId) ?? null : null;
       const result = await comments.insertOne({
         targetType,
@@ -56,6 +83,7 @@ export async function POST(req: NextRequest) {
         title: item.title,
         category: item.category,
         body: item.comment,
+        stickerUrl: item.imageUrl, // from Image: line in the import format
         isSpoiler: false,
         votes: { up: 0, down: 0 },
         reportCount: 0,
@@ -64,12 +92,13 @@ export async function POST(req: NextRequest) {
         updatedAt: new Date(),
         isGhost: true,
         ghostCreatedBy: adminId,
+        importHash,
       });
       tempIdToRealId.set(item.tempId, result.insertedId);
       inserted += 1;
     }
 
-    return NextResponse.json({ ok: true, inserted });
+    return NextResponse.json({ ok: true, inserted, skipped });
   } catch {
     return NextResponse.json(
       { error: "Database not configured. Set MONGODB_URI in .env.local." },
@@ -77,3 +106,4 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+

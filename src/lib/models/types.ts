@@ -131,4 +131,6 @@ export interface Comment {
   // Admin-only fields — must be stripped from any public API response.
   isGhost?: boolean;
   ghostCreatedBy?: ObjectId;
+  /** SHA-256 fingerprint for bulk-import deduplication. Set only on ghost comments created via bulk import. */
+  importHash?: string;
 }

@@ -14,16 +14,22 @@ Category: Discussion
 Username: Alan
 Time: 2 hours ago
 Comment: This chapter was incredible!
+Image: https://example.com/reaction.gif
 
 Reply:
   Username: ShadowReader
   Time: 1 hour ago
-  Comment: I completely agree.
+  Comment: I completely agree — the twist was perfect.
+
+  Reply:
+    Username: Alan
+    Time: 45 minutes ago
+    Comment: Right? And the foreshadowing in chapter 3!
 
 Reply:
   Username: NovelFan
-  Time: 45 minutes ago
-  Comment: The ending surprised me.
+  Time: 30 minutes ago
+  Comment: The ending surprised me too.
 
 ---
 
@@ -85,7 +91,7 @@ export function BulkGhostImport({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Import failed.");
-      setResult({ type: "ok", text: `Imported ${data.inserted} comments.` });
+      setResult({ type: "ok", text: `Imported ${data.inserted} comment${data.inserted === 1 ? "" : "s"}${data.skipped > 0 ? ` · skipped ${data.skipped} duplicate${data.skipped === 1 ? "" : "s"}` : ""}.` });
       setThreads(null);
       setText("");
     } catch (err) {
@@ -101,9 +107,9 @@ export function BulkGhostImport({
         <label className="block text-xs text-text-secondary">
           Paste formatted comments{" "}
           <span className="text-text-disabled">
-            — add optional "Title:" / "Category:" lines above a root comment if you want it to
-            appear as a proper Community discussion (only used when posting to the novel page,
-            ignored for chapter comments)
+            — add optional "Title:" / "Category:" lines above a root comment to create a Community
+            discussion. Nest replies with "Reply:" blocks (indent 2 spaces per level for Reddit-style
+            threading). Add "Image: https://…" to attach an image. Separate threads with "---".
           </span>
         </label>
         <button onClick={() => setText(EXAMPLE)} className="text-[11px] text-accent">
@@ -217,6 +223,18 @@ function PreviewNode({
           rows={2}
           className="mt-1.5 w-full rounded border border-border bg-card px-1.5 py-1 text-xs text-text-secondary"
         />
+        {node.imageUrl && (
+          <div className="mt-1.5 flex items-center gap-2">
+            <img
+              src={node.imageUrl}
+              alt="Attached image preview"
+              className="max-h-20 max-w-[120px] rounded border border-border object-contain"
+            />
+            <span className="truncate text-[10px] text-text-disabled" title={node.imageUrl}>
+              {node.imageUrl}
+            </span>
+          </div>
+        )}
       </div>
       {node.replies.map((r) => (
         <div key={r.id} className="mt-2">

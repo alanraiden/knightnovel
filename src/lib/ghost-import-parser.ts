@@ -27,6 +27,8 @@ export interface ParsedComment {
   comment: string;
   title: string | null; // only meaningful for root (depth 0) nodes — a discussion title
   category: string | null; // same — only meaningful for root nodes
+  /** https:// URL pasted via the "Image:" format line — stored as stickerUrl on import */
+  imageUrl: string | null;
   replies: ParsedComment[];
   resolvedDate: Date;
 }
@@ -43,10 +45,11 @@ interface DraftBlock {
   title: string | null;
   category: string | null;
   commentLines: string[];
+  imageRaw: string | null;
 }
 
 function emptyDraft(): DraftBlock {
-  return { username: "", timeRaw: null, title: null, category: null, commentLines: [] };
+  return { username: "", timeRaw: null, title: null, category: null, commentLines: [], imageRaw: null };
 }
 
 export function parseGhostImportText(text: string): ParsedComment[] {
@@ -71,6 +74,9 @@ function parseThread(block: string): ParsedComment | null {
       current = null;
       return;
     }
+    // Validate imageRaw — only accept https?:// URLs (Option A: URL-only, no uploads)
+    const imageUrl =
+      current.imageRaw && /^https?:\/\//i.test(current.imageRaw) ? current.imageRaw : null;
     const node: ParsedComment = {
       id: nextId(),
       username: current.username || "Anonymous",
@@ -78,6 +84,7 @@ function parseThread(block: string): ParsedComment | null {
       comment: current.commentLines.join("\n").trim(),
       title: currentDepth === 0 ? current.title : null,
       category: currentDepth === 0 ? current.category : null,
+      imageUrl,
       replies: [],
       resolvedDate: new Date(), // placeholder, real value set by assignTimestamps
     };
@@ -109,6 +116,7 @@ function parseThread(block: string): ParsedComment | null {
     const commentMatch = rawLine.match(/^\s*Comment:\s*(.*)$/i);
     const titleMatch = rawLine.match(/^\s*Title:\s*(.*)$/i);
     const categoryMatch = rawLine.match(/^\s*Category:\s*(.*)$/i);
+    const imageMatch = rawLine.match(/^\s*Image:\s*(.*)$/i);
 
     if (usernameMatch) {
       if (!current) current = emptyDraft();
@@ -122,6 +130,9 @@ function parseThread(block: string): ParsedComment | null {
     } else if (categoryMatch) {
       if (!current) current = emptyDraft();
       current.category = categoryMatch[1].trim() || null;
+    } else if (imageMatch) {
+      if (!current) current = emptyDraft();
+      current.imageRaw = imageMatch[1].trim() || null;
     } else if (commentMatch) {
       if (!current) current = emptyDraft();
       current.commentLines.push(commentMatch[1]);
@@ -191,6 +202,8 @@ export interface FlatGhostComment {
   comment: string;
   title?: string;
   category?: string;
+  /** https:// URL from an "Image:" line — will be stored as stickerUrl */
+  imageUrl?: string;
   createdAt: string; // ISO
 }
 
@@ -204,6 +217,7 @@ export function flattenThreads(roots: ParsedComment[]): FlatGhostComment[] {
       comment: node.comment,
       title: node.title ?? undefined,
       category: node.category ?? undefined,
+      imageUrl: node.imageUrl ?? undefined,
       createdAt: node.resolvedDate.toISOString(),
     });
     node.replies.forEach((r) => walk(r, node.id));
