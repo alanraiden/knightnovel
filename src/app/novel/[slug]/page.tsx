@@ -15,6 +15,11 @@ import { DescriptionCollapse } from "@/components/novel/description-collapse";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://knightnovel.com";
 
+// Force per-request rendering so live values (comment count, view counters,
+// user-specific bookmark/favorite state) are always accurate — a static or
+// ISR-cached page would serve stale counts after moderation actions.
+export const dynamic = "force-dynamic";
+
 export async function generateStaticParams() {
   const slugs = await getNovelSlugs();
   return slugs.map((slug) => ({ slug }));

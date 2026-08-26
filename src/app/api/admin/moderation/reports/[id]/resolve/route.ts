@@ -28,10 +28,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     );
 
     return NextResponse.json({ ok: true });
-  } catch {
-    return NextResponse.json(
-      { error: "Database not configured. Set MONGODB_URI in .env.local." },
-      { status: 503 }
-    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: message }, { status: 503 });
   }
 }

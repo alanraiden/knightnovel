@@ -99,11 +99,10 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ ok: true, inserted, skipped });
-  } catch {
-    return NextResponse.json(
-      { error: "Database not configured. Set MONGODB_URI in .env.local." },
-      { status: 503 }
-    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    // Surface the real error — the old generic message hid connection/auth failures.
+    return NextResponse.json({ error: message }, { status: 503 });
   }
 }
 

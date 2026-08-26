@@ -56,6 +56,11 @@ export function CommentThread({
   const [loadedTopLevel, setLoadedTopLevel] = useState(initialComments?.filter((c) => !c.parentId).length ?? 0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [changingSort, setChangingSort] = useState(false);
+  // Tracks the live comment count — initialised from the server-rendered prop
+  // (which is now always fresh thanks to force-dynamic), then kept in sync
+  // with every API response so moderation removals are reflected immediately
+  // after the next sort change or load-more without requiring a page reload.
+  const [displayedTotal, setDisplayedTotal] = useState(totalAll);
 
   const topLevel = comments.filter((c) => !c.parentId);
   const repliesOf = (id: string) => comments.filter((c) => c.parentId === id);
@@ -91,6 +96,7 @@ export function CommentThread({
       setComments(page.comments);
       setLoadedTopLevel(page.comments.filter((c) => !c.parentId).length);
       setHasMore(page.hasMore);
+      setDisplayedTotal(page.totalAll);
     }
     setChangingSort(false);
   };
@@ -106,6 +112,7 @@ export function CommentThread({
       });
       setLoadedTopLevel((n) => n + page.comments.filter((c) => !c.parentId).length);
       setHasMore(page.hasMore);
+      setDisplayedTotal(page.totalAll);
     }
     setLoadingMore(false);
   };
@@ -114,7 +121,7 @@ export function CommentThread({
     <div>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-medium text-text-primary">
-          Comments <span className="font-normal text-text-muted">({totalAll || comments.length})</span>
+          Comments <span className="font-normal text-text-muted">({displayedTotal || comments.length})</span>
         </p>
         <div className="flex gap-3 text-xs">
           {sortOptions.map((s) => (
