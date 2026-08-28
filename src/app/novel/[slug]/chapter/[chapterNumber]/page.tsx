@@ -54,6 +54,13 @@ export default async function ChapterPage({
   incrementNovelViews(novel.slug).catch(() => {});
 
   const chapterDoc = await getChapterContent(params.slug, chapterNumber);
+
+  // When the DB is configured and the chapter document doesn't exist, the
+  // chapter number is genuinely missing (e.g. novel.chapterCount is stale or
+  // was set too high). Return 404 instead of showing placeholder text.
+  const dbConnected = Boolean(process.env.MONGODB_URI);
+  if (dbConnected && !chapterDoc) notFound();
+
   // Real chapter id when available (DB-backed), otherwise a stable
   // composite string so comments still have a consistent target to attach to.
   const commentTargetId = chapterDoc?.id ?? `${novel.slug}-ch-${chapterNumber}`;

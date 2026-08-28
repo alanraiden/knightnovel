@@ -109,8 +109,13 @@ function ChapterRow({
 
   return (
     <div className="flex items-center justify-between rounded px-2 py-1.5 text-xs text-text-secondary hover:bg-card">
-      <span className="truncate">
+      <span className="flex items-center gap-1.5 truncate">
         Ch.{chapter.chapterNumber} — {chapter.title}
+        {(chapter.wordCount === 0 || chapter.isPlaceholder) && (
+          <span className="shrink-0 rounded bg-status-error/15 px-1 py-0.5 text-[10px] font-medium text-status-error">
+            {chapter.isPlaceholder ? "placeholder" : "no content"}
+          </span>
+        )}
       </span>
       <div className="flex shrink-0 items-center gap-2">
         <span className="text-text-muted">{chapter.status}</span>
@@ -136,6 +141,45 @@ export function ManageChaptersClient({
   const [chapters, setChapters] = useState(initialChapters);
   useEffect(() => setChapters(initialChapters), [initialChapters]);
   const [tab, setTab] = useState<"single" | "bulk">("single");
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
+  const [deletingEmpty, setDeletingEmpty] = useState(false);
+
+  const syncChapterCount = async () => {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const res = await fetch(`/api/admin/novels/${novelSlug}/sync-chapters`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Sync failed.");
+      setSyncResult(`✓ Chapter count synced to ${data.chapterCount}`);
+      router.refresh();
+    } catch (err) {
+      setSyncResult(err instanceof Error ? err.message : "Sync failed.");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const deleteEmptyChapters = async () => {
+    const empty = chapters.filter((c) => c.wordCount === 0 || c.isPlaceholder);
+    if (empty.length === 0) return;
+    if (!confirm(`Delete ${empty.length} chapter${empty.length > 1 ? "s" : ""} with placeholder/no content? This cannot be undone.`)) return;
+    setDeletingEmpty(true);
+    setSyncResult(null);
+    try {
+      const res = await fetch(`/api/admin/novels/${novelSlug}/sync-chapters`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Delete failed.");
+      setSyncResult(`✓ Deleted ${data.deleted} empty chapter${data.deleted > 1 ? "s" : ""} (Ch.${data.removedChapterNumbers.join(", Ch.")}) — count now ${data.chapterCount}`);
+      setChapters((prev) => prev.filter((c) => c.wordCount > 0));
+      router.refresh();
+    } catch (err) {
+      setSyncResult(err instanceof Error ? err.message : "Delete failed.");
+    } finally {
+      setDeletingEmpty(false);
+    }
+  };
 
   // Single-chapter form
   const [num, setNum] = useState("");
@@ -300,8 +344,45 @@ export function ManageChaptersClient({
       </div>
 
       <div>
-        <p className="mb-2 text-sm font-medium text-text-primary">Existing chapters ({chapters.length})</p>
-        <div className="max-h-[480px] space-y-1 overflow-y-auto rounded-card border border-border bg-surface p-2 themed-scroll">
+        <div className="mb-2 flex items-center justify-between">
+          <p className="text-sm font-medium text-text-primary">Existing chapters ({chapters.length})</p>
+          <button
+            onClick={syncChapterCount}
+            disabled={syncing}
+            title="Recounts actual chapters in the database and fixes the novel's chapter count"
+            className="rounded border border-border px-2 py-1 text-[11px] text-text-secondary hover:border-border-hover hover:text-text-primary disabled:opacity-40"
+          >
+            {syncing ? "Syncing…" : "Sync count"}
+          </button>
+        </div>
+        {syncResult && (
+          <p className={`mb-2 text-[11px] ${syncResult.startsWith("✓") ? "text-status-success" : "text-status-error"}`}>
+            {syncResult}
+          </p>
+        )}
+        {(() => {
+          const empty = chapters.filter((c) => c.wordCount === 0 || c.isPlaceholder);
+          if (empty.length === 0) return null;
+          const MAX_SHOW = 5;
+          const shown = empty.slice(0, MAX_SHOW).map((c) => `Ch.${c.chapterNumber}`).join(", ");
+          const overflow = empty.length > MAX_SHOW ? ` …and ${empty.length - MAX_SHOW} more` : "";
+          return (
+            <div className="mb-2 flex items-start justify-between gap-2 rounded border border-status-error/30 bg-status-error/10 px-2.5 py-2">
+              <p className="text-[11px] text-status-error">
+                ⚠ {empty.length} chapter{empty.length > 1 ? "s" : ""} have placeholder/no content ({shown}{overflow}) — readers see broken pages.
+              </p>
+              <button
+                onClick={deleteEmptyChapters}
+                disabled={deletingEmpty}
+                className="shrink-0 rounded bg-status-error px-2 py-0.5 text-[11px] font-medium text-white disabled:opacity-50"
+              >
+                {deletingEmpty ? "Deleting…" : "Delete all"}
+              </button>
+            </div>
+          );
+        })()}
+
+        <div className="max-h-[640px] space-y-1 overflow-y-auto rounded-card border border-border bg-surface p-2 themed-scroll">
           {chapters.length === 0 ? (
             <p className="p-2 text-xs text-text-muted">No chapters yet.</p>
           ) : (

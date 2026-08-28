@@ -22,7 +22,7 @@ export default async function CommunityPage() {
     getTopDiscussions(50, "recent"),
     getPopularTags(10),
     getTopContributors(6),
-    getMostActiveNovels(5),
+    getMostActiveNovels(3),
     getTrending(5),
     getAllNovels(),
   ]);

@@ -493,6 +493,9 @@ export interface ChapterListItem {
   chapterNumber: number;
   title: string;
   status: "published" | "draft";
+  wordCount: number;
+  /** True when the stored content is the default placeholder text, not real chapter content. */
+  isPlaceholder: boolean;
 }
 
 export interface NotificationView {
@@ -992,20 +995,28 @@ export async function incrementNovelViews(novelSlug: string): Promise<void> {
 
 export async function getChaptersForAdmin(slug: string): Promise<ChapterListItem[]> {
   if (!hasDb()) return [];
+  // Unique substring present in the default placeholder content that is shown
+  // when no real chapter text has been added yet.  We check for this so the
+  // admin UI can flag and bulk-delete placeholder chapters.
+  const PLACEHOLDER_MARKER = "This is placeholder text";
   try {
     const { novels, chapters } = await collections();
     const novel = await novels.findOne({ slug });
     if (!novel) return [];
+    // Fetch a small content preview (first 120 chars) — enough to detect the
+    // placeholder marker without pulling the full text for every chapter.
     const docs = await chapters
       .find({ novelId: novel._id })
       .sort({ chapterNumber: 1 })
-      .project({ content: 0 })
+      .project({ content: { $substr: ["$content", 0, 120] }, wordCount: 1, chapterNumber: 1, title: 1, status: 1 })
       .toArray();
     return docs.map((d) => ({
       id: d._id!.toString(),
       chapterNumber: d.chapterNumber,
       title: d.title,
       status: d.status,
+      wordCount: d.wordCount ?? 0,
+      isPlaceholder: typeof d.content === "string" && d.content.includes(PLACEHOLDER_MARKER),
     }));
   } catch (err) {
     console.error("[queries] getChaptersForAdmin — returning empty list:", err);
