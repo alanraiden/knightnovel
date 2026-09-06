@@ -1003,21 +1003,25 @@ export async function getChaptersForAdmin(slug: string): Promise<ChapterListItem
     const { novels, chapters } = await collections();
     const novel = await novels.findOne({ slug });
     if (!novel) return [];
-    // Fetch a small content preview (first 120 chars) — enough to detect the
-    // placeholder marker without pulling the full text for every chapter.
+    // Fetch chapters — content is projected and then sliced in JS for the
+    // placeholder check. ($substr is an aggregation-only operator and cannot
+    // be used inside find().project(), so we do the trim client-side.)
     const docs = await chapters
       .find({ novelId: novel._id })
       .sort({ chapterNumber: 1 })
-      .project({ content: { $substr: ["$content", 0, 120] }, wordCount: 1, chapterNumber: 1, title: 1, status: 1 })
+      .project({ content: 1, wordCount: 1, chapterNumber: 1, title: 1, status: 1 })
       .toArray();
-    return docs.map((d) => ({
-      id: d._id!.toString(),
-      chapterNumber: d.chapterNumber,
-      title: d.title,
-      status: d.status,
-      wordCount: d.wordCount ?? 0,
-      isPlaceholder: typeof d.content === "string" && d.content.includes(PLACEHOLDER_MARKER),
-    }));
+    return docs.map((d) => {
+      const preview = typeof d.content === "string" ? d.content.slice(0, 120) : "";
+      return {
+        id: d._id!.toString(),
+        chapterNumber: d.chapterNumber,
+        title: d.title,
+        status: d.status,
+        wordCount: d.wordCount ?? 0,
+        isPlaceholder: preview.includes(PLACEHOLDER_MARKER),
+      };
+    });
   } catch (err) {
     console.error("[queries] getChaptersForAdmin — returning empty list:", err);
     return [];
