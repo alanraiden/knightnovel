@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import { BulkGhostImport } from "@/components/admin/bulk-ghost-import";
+import { ThreadEditorPanel } from "@/components/admin/thread-editor-panel";
 import type { NovelView } from "@/lib/queries";
 
 const categories = ["Discussion", "Recommendation", "Question", "Theory", "Meme"];
 
 export function GhostDiscussionForm({ novels }: { novels: NovelView[] }) {
-  const [mode, setMode] = useState<"single" | "bulk">("single");
+  const [mode, setMode] = useState<"single" | "bulk" | "thread">("single");
   const [novelSlug, setNovelSlug] = useState(novels[0]?.slug ?? "");
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState(categories[0]);
@@ -66,6 +67,12 @@ export function GhostDiscussionForm({ novels }: { novels: NovelView[] }) {
           className={`rounded px-3 py-1.5 text-xs ${mode === "bulk" ? "bg-accent-highlight text-[#412402]" : "border border-border text-text-secondary"}`}
         >
           Bulk import
+        </button>
+        <button
+          onClick={() => setMode("thread")}
+          className={`rounded px-3 py-1.5 text-xs ${mode === "thread" ? "bg-accent-highlight text-[#412402]" : "border border-border text-text-secondary"}`}
+        >
+          Thread editor
         </button>
       </div>
 
@@ -155,8 +162,15 @@ export function GhostDiscussionForm({ novels }: { novels: NovelView[] }) {
               </p>
             )}
           </>
-        ) : (
+        ) : mode === "bulk" ? (
           <BulkGhostImport novelSlug={novelSlug} chapterId="" />
+        ) : (
+          // Thread editor — novel-level discussions only (chapterId always empty)
+          <ThreadEditorPanel
+            novelSlug={novelSlug}
+            chapters={[]}
+            chapterId=""
+          />
         )}
       </div>
     </div>

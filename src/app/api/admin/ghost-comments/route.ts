@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ObjectId } from "mongodb";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { collections } from "@/lib/db";
@@ -8,6 +9,7 @@ import { z } from "zod";
 const bodySchema = z.object({
   novelSlug: z.string(),
   chapterId: z.string().optional(), // if omitted, defaults to a novel-level comment
+  parentId: z.string().optional(),  // ObjectId string of parent comment (for replies)
   displayName: z.string().min(1).max(40),
   title: z.string().max(120).optional(),
   category: z.string().max(40).optional(),
@@ -26,7 +28,7 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const { novelSlug, chapterId, displayName, title, category, body, createdAt } = parsed.data;
+  const { novelSlug, chapterId, parentId, displayName, title, category, body, createdAt } = parsed.data;
 
   const { novels, comments } = await collections();
   const novel = await novels.findOne({ slug: novelSlug });
@@ -38,10 +40,17 @@ export async function POST(req: NextRequest) {
   const targetType = chapterId ? "chapter" : "novel";
   const targetId = toTargetId(chapterId ?? novelSlug);
 
-  await comments.insertOne({
+  // Resolve parentId — must be a valid ObjectId of an existing comment
+  let resolvedParentId: ObjectId | null = null;
+  if (parentId && ObjectId.isValid(parentId)) {
+    const parent = await comments.findOne({ _id: new ObjectId(parentId) });
+    if (parent) resolvedParentId = parent._id as ObjectId;
+  }
+
+  const result = await comments.insertOne({
     targetType,
     targetId,
-    parentId: null,
+    parentId: resolvedParentId,
     authorId: null, // no real user behind a ghost comment
     displayName,
     title,
@@ -57,5 +66,5 @@ export async function POST(req: NextRequest) {
     ghostCreatedBy: session?.user ? (session.user as { id?: string }).id : undefined,
   });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, id: result.insertedId.toString() });
 }
