@@ -15,9 +15,17 @@ export interface AdminCommentView {
   isGhost: boolean;
 }
 
-// GET /api/admin/ghost-comments/thread?novelSlug=&chapterId=
-// Returns every comment (all statuses) for the target so the Thread Editor
-// can display and edit the full thread. Admin-only.
+/**
+ * GET /api/admin/ghost-comments/thread?novelSlug=&chapterId=&discussionId=
+ *
+ * Returns every comment (all statuses) for the target so the Thread Editor
+ * can display and edit the full thread. Admin-only.
+ *
+ * Optional `discussionId`: when provided, returns only that root discussion
+ * post and all of its descendants (replies at any depth). When omitted the
+ * full set of comments for the target is returned (backward-compatible with
+ * the chapter-thread editor path which identifies threads by chapterId).
+ */
 export async function GET(req: NextRequest) {
   const session = await requireAdmin();
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -25,6 +33,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const novelSlug = searchParams.get("novelSlug");
   const chapterId = searchParams.get("chapterId") || "";
+  const discussionId = searchParams.get("discussionId") || "";
 
   if (!novelSlug) {
     return NextResponse.json({ error: "novelSlug is required" }, { status: 400 });
@@ -45,7 +54,7 @@ export async function GET(req: NextRequest) {
       .sort({ createdAt: 1 })
       .toArray();
 
-    const result: AdminCommentView[] = docs.map((d) => ({
+    const all: AdminCommentView[] = docs.map((d) => ({
       id: (d._id as ObjectId).toString(),
       parentId: d.parentId ? d.parentId.toString() : null,
       displayName: d.displayName as string,
@@ -55,6 +64,26 @@ export async function GET(req: NextRequest) {
       status: (d.status as AdminCommentView["status"]) ?? "visible",
       isGhost: Boolean(d.isGhost),
     }));
+
+    // If a specific discussion root was requested, BFS-filter to that subtree only.
+    let result: AdminCommentView[];
+    if (discussionId) {
+      const included = new Set<string>();
+      included.add(discussionId);
+      const queue = [discussionId];
+      while (queue.length) {
+        const cur = queue.shift()!;
+        for (const c of all) {
+          if (c.parentId === cur) {
+            included.add(c.id);
+            queue.push(c.id);
+          }
+        }
+      }
+      result = all.filter((c) => included.has(c.id));
+    } else {
+      result = all;
+    }
 
     return NextResponse.json({ comments: result });
   } catch (err) {

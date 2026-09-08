@@ -1,15 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { MessageSquare, AlertCircle, Plus, RefreshCw } from "lucide-react";
 import { BulkGhostImport } from "@/components/admin/bulk-ghost-import";
 import { ThreadEditorPanel } from "@/components/admin/thread-editor-panel";
 import type { NovelView } from "@/lib/queries";
 
 const categories = ["Discussion", "Recommendation", "Question", "Theory", "Meme"];
 
+interface DiscussionStub {
+  id: string;
+  title: string;
+  category: string | null;
+  author: string;
+  status: "visible" | "hidden" | "removed";
+  replyCount: number;
+  createdAt: string;
+}
+
 export function GhostDiscussionForm({ novels }: { novels: NovelView[] }) {
   const [mode, setMode] = useState<"single" | "bulk" | "thread">("single");
   const [novelSlug, setNovelSlug] = useState(novels[0]?.slug ?? "");
+
+  // ── Single-post form state ────────────────────────────────────────────────
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState(categories[0]);
   const [displayName, setDisplayName] = useState("");
@@ -17,6 +30,35 @@ export function GhostDiscussionForm({ novels }: { novels: NovelView[] }) {
   const [when, setWhen] = useState("");
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
+
+  // ── Thread-editor discussion selector state ───────────────────────────────
+  const [discussions, setDiscussions] = useState<DiscussionStub[] | null>(null);
+  const [discussionsLoading, setDiscussionsLoading] = useState(false);
+  const [discussionsError, setDiscussionsError] = useState("");
+  const [selectedDiscussionId, setSelectedDiscussionId] = useState("");
+
+  // Fetch root-level discussions whenever novelSlug changes (thread-editor mode)
+  useEffect(() => {
+    if (mode !== "thread" || !novelSlug) return;
+    setDiscussions(null);
+    setSelectedDiscussionId("");
+    setDiscussionsError("");
+    setDiscussionsLoading(true);
+
+    fetch(`/api/admin/ghost-comments/discussions?novelSlug=${encodeURIComponent(novelSlug)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.error) throw new Error(data.error);
+        const list: DiscussionStub[] = data.discussions ?? [];
+        setDiscussions(list);
+        if (list.length > 0) setSelectedDiscussionId(list[0].id);
+      })
+      .catch((err) => {
+        setDiscussionsError(err instanceof Error ? err.message : "Failed to load discussions.");
+        setDiscussions([]);
+      })
+      .finally(() => setDiscussionsLoading(false));
+  }, [novelSlug, mode]);
 
   const submit = async () => {
     setStatus("saving");
@@ -40,11 +82,18 @@ export function GhostDiscussionForm({ novels }: { novels: NovelView[] }) {
       setDisplayName("");
       setBody("");
       setWhen("");
+      // Refresh the discussion list in thread-editor mode after a new post
+      if (mode === "thread") {
+        setDiscussions(null);
+        setSelectedDiscussionId("");
+      }
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : "Failed to post.");
       setStatus("error");
     }
   };
+
+  const selectedDiscussion = discussions?.find((d) => d.id === selectedDiscussionId) ?? null;
 
   return (
     <div className="max-w-2xl">
@@ -77,6 +126,7 @@ export function GhostDiscussionForm({ novels }: { novels: NovelView[] }) {
       </div>
 
       <div className="mt-6 space-y-4">
+        {/* Novel selector — shared across all modes */}
         <div>
           <label className="mb-1 block text-xs text-text-secondary">Novel</label>
           <select
@@ -165,14 +215,116 @@ export function GhostDiscussionForm({ novels }: { novels: NovelView[] }) {
         ) : mode === "bulk" ? (
           <BulkGhostImport novelSlug={novelSlug} chapterId="" />
         ) : (
-          // Thread editor — novel-level discussions only (chapterId always empty)
-          <ThreadEditorPanel
-            novelSlug={novelSlug}
-            chapters={[]}
-            chapterId=""
-          />
+          /* ── Thread Editor ── */
+          <div className="space-y-4">
+            {/* Discussion selector */}
+            <div>
+              <div className="mb-1 flex items-center justify-between">
+                <label className="text-xs text-text-secondary">Discussion / Thread</label>
+                {/* Refresh button */}
+                <button
+                  onClick={() => {
+                    setDiscussions(null);
+                    setSelectedDiscussionId("");
+                    setDiscussionsLoading(true);
+                    fetch(`/api/admin/ghost-comments/discussions?novelSlug=${encodeURIComponent(novelSlug)}`)
+                      .then((r) => r.json())
+                      .then((data) => {
+                        const list: DiscussionStub[] = data.discussions ?? [];
+                        setDiscussions(list);
+                        if (list.length > 0) setSelectedDiscussionId(list[0].id);
+                      })
+                      .catch(() => setDiscussions([]))
+                      .finally(() => setDiscussionsLoading(false));
+                  }}
+                  title="Refresh discussion list"
+                  className="flex items-center gap-1 text-[11px] text-text-muted hover:text-text-primary"
+                >
+                  <RefreshCw size={11} />
+                  Refresh
+                </button>
+              </div>
+
+              {discussionsLoading ? (
+                <div className="flex items-center gap-2 rounded border border-border bg-surface px-3 py-2 text-xs text-text-muted">
+                  <RefreshCw size={12} className="animate-spin" />
+                  Loading discussions…
+                </div>
+              ) : discussionsError ? (
+                <div className="flex items-center gap-2 rounded border border-status-error/30 bg-status-error/10 px-3 py-2 text-xs text-status-error">
+                  <AlertCircle size={12} />
+                  {discussionsError}
+                </div>
+              ) : discussions !== null && discussions.length === 0 ? (
+                /* ── Empty state ── */
+                <div className="rounded-card border border-dashed border-border bg-surface p-6 text-center">
+                  <MessageSquare size={28} className="mx-auto mb-3 text-text-disabled" />
+                  <p className="mb-1 text-sm font-medium text-text-primary">No discussions yet</p>
+                  <p className="mb-4 text-xs text-text-muted">
+                    This novel has no root-level community discussions. Create one first.
+                  </p>
+                  <button
+                    onClick={() => setMode("single")}
+                    className="inline-flex items-center gap-1.5 rounded bg-accent-highlight px-4 py-1.5 text-sm font-medium text-[#412402]"
+                  >
+                    <Plus size={13} />
+                    Create a new discussion
+                  </button>
+                </div>
+              ) : discussions !== null && discussions.length > 0 ? (
+                <select
+                  value={selectedDiscussionId}
+                  onChange={(e) => setSelectedDiscussionId(e.target.value)}
+                  className="w-full rounded border border-border bg-surface px-3 py-2 text-sm text-text-primary"
+                >
+                  {discussions.map((d) => {
+                    const date = new Date(d.createdAt).toLocaleDateString();
+                    const hidden = d.status !== "visible" ? ` [${d.status}]` : "";
+                    const replies = d.replyCount > 0 ? ` · ${d.replyCount} repl${d.replyCount === 1 ? "y" : "ies"}` : "";
+                    const cat = d.category ? ` [${d.category}]` : "";
+                    return (
+                      <option key={d.id} value={d.id}>
+                        {hidden}{cat} {d.title} — {d.author} · {date}{replies}
+                      </option>
+                    );
+                  })}
+                </select>
+              ) : null}
+            </div>
+
+            {/* Selected discussion meta-row */}
+            {selectedDiscussion && (
+              <div className="flex flex-wrap items-center gap-2 rounded border border-border bg-surface/60 px-3 py-2 text-xs text-text-muted">
+                {selectedDiscussion.category && (
+                  <span className="rounded bg-accent-highlight/20 px-1.5 py-0.5 text-[10px] font-medium text-accent-highlight">
+                    {selectedDiscussion.category}
+                  </span>
+                )}
+                {selectedDiscussion.status !== "visible" && (
+                  <span className="rounded bg-status-error/15 px-1.5 py-0.5 text-[10px] text-status-error">
+                    {selectedDiscussion.status}
+                  </span>
+                )}
+                <span className="text-text-secondary font-medium truncate max-w-xs">{selectedDiscussion.title}</span>
+                <span className="ml-auto shrink-0">by {selectedDiscussion.author}</span>
+                <span>·</span>
+                <span>{selectedDiscussion.replyCount} repl{selectedDiscussion.replyCount === 1 ? "y" : "ies"}</span>
+              </div>
+            )}
+
+            {/* Thread editor panel — only rendered when a discussion is selected */}
+            {selectedDiscussionId && (
+              <ThreadEditorPanel
+                novelSlug={novelSlug}
+                chapters={[]}
+                chapterId=""
+                discussionId={selectedDiscussionId}
+              />
+            )}
+          </div>
         )}
       </div>
     </div>
   );
 }
+

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Lock, Eye, EyeOff, Trash2, Plus, ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
 import type { NovelView } from "@/lib/queries";
 
@@ -485,10 +485,13 @@ export function ThreadEditorPanel({
   novelSlug,
   chapters,
   chapterId,
+  discussionId,
 }: {
   novelSlug: string;
   chapters: ChapterOption[];
   chapterId: string;
+  /** When set, only this root discussion + its descendants are loaded. */
+  discussionId?: string;
 }) {
   const [flat, setFlat] = useState<AdminCommentView[]>([]);
   const [loading, setLoading] = useState(false);
@@ -504,6 +507,7 @@ export function ThreadEditorPanel({
     try {
       const qs = new URLSearchParams({ novelSlug });
       if (chapterId) qs.set("chapterId", chapterId);
+      if (discussionId) qs.set("discussionId", discussionId);
       const res = await fetch(`/api/admin/ghost-comments/thread?${qs}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to load thread.");
@@ -514,7 +518,17 @@ export function ThreadEditorPanel({
     } finally {
       setLoading(false);
     }
-  }, [novelSlug, chapterId]);
+  }, [novelSlug, chapterId, discussionId]);
+
+  // Auto-load whenever the discussion selection changes
+  useEffect(() => {
+    if (discussionId) {
+      setFlat([]);
+      setLoaded(false);
+      loadThread();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discussionId]);
 
   const handleUpdate = useCallback((id: string, patch: Partial<AdminCommentView>) => {
     setFlat((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
