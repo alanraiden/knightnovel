@@ -1225,6 +1225,197 @@ export async function getNotificationSettings(userId: string): Promise<Notificat
 // given notification type — missing/never-set preferences default to "on"
 // so this never silently stops notifying people who've never touched the
 // setting.
+// ---------------------------------------------------------------------------
+// Admin Overview — single aggregation used by both the server-component page
+// and the /api/admin/overview route. Server components call this directly
+// (no internal HTTP round-trip); the API route wraps it for any client usage.
+// ---------------------------------------------------------------------------
+
+export interface AdminOverviewData {
+  totalNovels: number;
+  totalChapters: number;
+  totalUsers: number;
+  totalComments: number;
+  pendingReports: number;
+  analytics: {
+    "7d": { newUsers: number; newComments: number; newFavorites: number; weeklyViews: number };
+    "30d": { newUsers: number; newComments: number; newFavorites: number; monthlyViews: number };
+  };
+  mostActiveNovels: {
+    slug: string;
+    title: string;
+    cover: string;
+    discussionCount: number;
+    viewsFormatted: string;
+  }[];
+  recentActivity: {
+    id: string;
+    author: string;
+    body: string;
+    novelSlug: string | null;
+    novelTitle: string | null;
+    createdAt: string;
+    isReply: boolean;
+  }[];
+}
+
+export async function getAdminOverviewData(): Promise<AdminOverviewData> {
+  const { novels, chapters, users, comments, reports, favorites } = await collections();
+
+  const now = new Date();
+  const ago7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const ago30d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+  const [
+    totalNovels,
+    totalChapters,
+    totalUsers,
+    totalComments,
+    pendingReports,
+    newUsers7d,
+    newComments7d,
+    newFavorites7d,
+    newUsers30d,
+    newComments30d,
+    newFavorites30d,
+    viewSumResult,
+    recentActivityDocs,
+    mostActiveNovelsRaw,
+  ] = await Promise.all([
+    novels.countDocuments({}),
+    chapters.countDocuments({ status: "published" }),
+    users.countDocuments({}),
+    comments.countDocuments({ status: "visible" }),
+    reports.countDocuments({ status: "open" }),
+
+    users.countDocuments({ createdAt: { $gte: ago7d } }),
+    comments.countDocuments({ status: "visible", createdAt: { $gte: ago7d } }),
+    favorites.countDocuments({ createdAt: { $gte: ago7d } }),
+
+    users.countDocuments({ createdAt: { $gte: ago30d } }),
+    comments.countDocuments({ status: "visible", createdAt: { $gte: ago30d } }),
+    favorites.countDocuments({ createdAt: { $gte: ago30d } }),
+
+    // Sum viewsWeekly / viewsMonthly across all novels — same counters the
+    // rankings page sorts by. Labelled "Weekly Views" / "Monthly Views" in UI.
+    novels
+      .aggregate<{ weeklyViews: number; monthlyViews: number }>([
+        {
+          $group: {
+            _id: null,
+            weeklyViews: { $sum: "$counters.viewsWeekly" },
+            monthlyViews: { $sum: "$counters.viewsMonthly" },
+          },
+        },
+      ])
+      .toArray(),
+
+    comments
+      .find({ status: "visible" })
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .project({ _id: 1, displayName: 1, body: 1, targetType: 1, targetId: 1, createdAt: 1, parentId: 1 })
+      .toArray(),
+
+    getMostActiveNovels(5),
+  ]);
+
+  const viewSums = viewSumResult[0] ?? { weeklyViews: 0, monthlyViews: 0 };
+
+  // Resolve novel slugs/titles for recent activity.
+  // Novel-type comments already carry the slug as targetId; chapter-type need a lookup.
+  const novelCache = new Map<string, { title: string; slug: string }>();
+  const recentActivity: AdminOverviewData["recentActivity"] = [];
+
+  for (const doc of recentActivityDocs) {
+    let novelSlug: string | null = null;
+    let novelTitle: string | null = null;
+
+    if (doc.targetType === "novel") {
+      novelSlug = String(doc.targetId);
+      const cached = novelCache.get(novelSlug);
+      if (cached) {
+        novelTitle = cached.title;
+      } else {
+        const novelDoc = await novels.findOne(
+          { slug: novelSlug },
+          { projection: { title: 1, slug: 1 } }
+        );
+        if (novelDoc) {
+          novelTitle = novelDoc.title;
+          novelCache.set(novelSlug, { title: novelDoc.title, slug: novelDoc.slug });
+        }
+      }
+    } else {
+      const targetIdStr = String(doc.targetId);
+      if (ObjectId.isValid(targetIdStr)) {
+        const chapter = await chapters.findOne(
+          { _id: new ObjectId(targetIdStr) },
+          { projection: { novelId: 1 } }
+        );
+        if (chapter) {
+          const novelIdStr = chapter.novelId.toString();
+          const cached = novelCache.get(novelIdStr);
+          if (cached) {
+            novelSlug = cached.slug;
+            novelTitle = cached.title;
+          } else {
+            const novelDoc = await novels.findOne(
+              { _id: chapter.novelId },
+              { projection: { title: 1, slug: 1 } }
+            );
+            if (novelDoc) {
+              novelSlug = novelDoc.slug;
+              novelTitle = novelDoc.title;
+              novelCache.set(novelIdStr, { title: novelDoc.title, slug: novelDoc.slug });
+            }
+          }
+        }
+      }
+    }
+
+    recentActivity.push({
+      id: doc._id.toString(),
+      author: doc.displayName,
+      body: String(doc.body).slice(0, 140),
+      novelSlug,
+      novelTitle,
+      createdAt: (doc.createdAt as Date).toISOString(),
+      isReply: doc.parentId != null,
+    });
+  }
+
+  return {
+    totalNovels,
+    totalChapters,
+    totalUsers,
+    totalComments,
+    pendingReports,
+    analytics: {
+      "7d": {
+        newUsers: newUsers7d,
+        newComments: newComments7d,
+        newFavorites: newFavorites7d,
+        weeklyViews: viewSums.weeklyViews,
+      },
+      "30d": {
+        newUsers: newUsers30d,
+        newComments: newComments30d,
+        newFavorites: newFavorites30d,
+        monthlyViews: viewSums.monthlyViews,
+      },
+    },
+    mostActiveNovels: mostActiveNovelsRaw.map((m) => ({
+      slug: m.novel.slug,
+      title: m.novel.title,
+      cover: m.novel.cover,
+      discussionCount: m.discussionCount,
+      viewsFormatted: m.novel.views,
+    })),
+    recentActivity,
+  };
+}
+
 export async function filterUsersByNotificationPref(
   userIds: ObjectId[],
   type: keyof NotificationSettings
