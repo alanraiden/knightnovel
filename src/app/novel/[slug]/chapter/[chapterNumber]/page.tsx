@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getNovelBySlug, getAllNovels, getChapterContent, getCommentsPage, incrementNovelViews } from "@/lib/queries";
+import { getNovelBySlug, getAllNovels, getChapterContent, getCommentsPage, incrementNovelViews, incrementChapterViews } from "@/lib/queries";
 import { ReadingShell } from "@/components/chapter/reading-shell";
 import { AdSlot } from "@/components/ads/ad-slot";
 
@@ -49,11 +49,16 @@ export default async function ChapterPage({
   const [novel, allNovels] = await Promise.all([getNovelBySlug(params.slug), getAllNovels()]);
   if (!novel) notFound();
 
-  // Fire-and-forget — a view counter failing shouldn't ever block the page
-  // from rendering, and there's no reason to make the reader wait on it.
+  // Fire-and-forget view counters — a counter failing should never block the page.
+  // Novel-level: increments counters.viewsTotal/Daily/Weekly/Monthly.
   incrementNovelViews(novel.slug).catch(() => {});
 
   const chapterDoc = await getChapterContent(params.slug, chapterNumber);
+
+  // Chapter-level increment — only for real DB-backed chapters. The composite
+  // demo fallback id (e.g. "slug-ch-N") is not a valid ObjectId, so
+  // incrementChapterViews() guards against it internally and is a safe no-op.
+  if (chapterDoc?.id) incrementChapterViews(chapterDoc.id).catch(() => {});
 
   // When the DB is configured and the chapter document doesn't exist, the
   // chapter number is genuinely missing (e.g. novel.chapterCount is stale or

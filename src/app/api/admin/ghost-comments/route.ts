@@ -14,6 +14,7 @@ const bodySchema = z.object({
   title: z.string().max(120).optional(),
   category: z.string().max(40).optional(),
   body: z.string().min(1).max(2000),
+  stickerUrl: z.string().url().optional(), // image attached to the comment (uploaded via /api/uploads/sticker)
   createdAt: z.string(),
 });
 
@@ -28,7 +29,7 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const { novelSlug, chapterId, parentId, displayName, title, category, body, createdAt } = parsed.data;
+  const { novelSlug, chapterId, parentId, displayName, title, category, body, stickerUrl, createdAt } = parsed.data;
 
   const { novels, comments } = await collections();
   const novel = await novels.findOne({ slug: novelSlug });
@@ -56,6 +57,7 @@ export async function POST(req: NextRequest) {
     title,
     category,
     body,
+    stickerUrl: stickerUrl ?? null,
     isSpoiler: false,
     votes: { up: 0, down: 0 },
     reportCount: 0,

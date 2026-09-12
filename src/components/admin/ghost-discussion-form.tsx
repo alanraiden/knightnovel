@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { MessageSquare, AlertCircle, Plus, RefreshCw } from "lucide-react";
 import { BulkGhostImport } from "@/components/admin/bulk-ghost-import";
-import { ThreadEditorPanel } from "@/components/admin/thread-editor-panel";
+import { ThreadEditorPanel, StickerPicker } from "@/components/admin/thread-editor-panel";
 import type { NovelView } from "@/lib/queries";
 
 const categories = ["Discussion", "Recommendation", "Question", "Theory", "Meme"];
@@ -28,6 +28,7 @@ export function GhostDiscussionForm({ novels }: { novels: NovelView[] }) {
   const [displayName, setDisplayName] = useState("");
   const [body, setBody] = useState("");
   const [when, setWhen] = useState("");
+  const [stickerUrl, setStickerUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -72,6 +73,7 @@ export function GhostDiscussionForm({ novels }: { novels: NovelView[] }) {
           title,
           category,
           body,
+          stickerUrl: stickerUrl ?? undefined,
           createdAt: when || new Date().toISOString(),
         }),
       });
@@ -82,6 +84,7 @@ export function GhostDiscussionForm({ novels }: { novels: NovelView[] }) {
       setDisplayName("");
       setBody("");
       setWhen("");
+      setStickerUrl(null);
       // Refresh the discussion list in thread-editor mode after a new post
       if (mode === "thread") {
         setDiscussions(null);
@@ -195,6 +198,12 @@ export function GhostDiscussionForm({ novels }: { novels: NovelView[] }) {
                 className="w-full rounded border border-border bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted"
                 placeholder="Write the discussion post as it should appear to visitors…"
               />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-text-secondary">
+                Image <span className="text-text-disabled">(optional — uploaded via Cloudflare R2)</span>
+              </label>
+              <StickerPicker value={stickerUrl} onChange={setStickerUrl} />
             </div>
             <button
               onClick={submit}

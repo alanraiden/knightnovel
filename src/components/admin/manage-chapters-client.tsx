@@ -118,6 +118,11 @@ function ChapterRow({
         )}
       </span>
       <div className="flex shrink-0 items-center gap-2">
+        {chapter.views > 0 && (
+          <span className="text-[10px] tabular-nums text-text-disabled" title="All-time views">
+            {chapter.views.toLocaleString()} views
+          </span>
+        )}
         <span className="text-text-muted">{chapter.status}</span>
         <button onClick={openEditor} className="text-accent">
           Edit
@@ -144,6 +149,28 @@ export function ManageChaptersClient({
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<string | null>(null);
   const [deletingEmpty, setDeletingEmpty] = useState(false);
+
+  // Top chapters by views — loaded lazily on demand, not on mount, to avoid
+  // adding any DB load to the page render for a section admins may not need.
+  const [topOpen, setTopOpen] = useState(false);
+  const [topChapters, setTopChapters] = useState<{ chapterNumber: number; title: string; views: number }[] | null>(null);
+  const [topLoading, setTopLoading] = useState(false);
+
+  const loadTopChapters = async () => {
+    if (topChapters !== null) { setTopOpen((v) => !v); return; }
+    setTopOpen(true);
+    setTopLoading(true);
+    try {
+      const res = await fetch(`/api/admin/novels/${novelSlug}/top-chapters`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to load.");
+      setTopChapters(data.chapters);
+    } catch {
+      setTopChapters([]);
+    } finally {
+      setTopLoading(false);
+    }
+  };
 
   const syncChapterCount = async () => {
     setSyncing(true);
@@ -340,6 +367,40 @@ export function ManageChaptersClient({
           <p className={`mt-3 text-xs ${message.type === "ok" ? "text-status-success" : "text-status-error"}`}>
             {message.text}
           </p>
+        )}
+      </div>
+
+      {/* Top chapters by all-time views — lazy-loaded panel */}
+      <div className="rounded-card border border-border bg-surface overflow-hidden">
+        <button
+          onClick={loadTopChapters}
+          className="flex w-full items-center justify-between px-3 py-2 text-xs font-medium text-text-secondary hover:text-text-primary"
+        >
+          <span>Top chapters by views</span>
+          <span className="text-text-disabled">{topOpen ? "▲" : "▼"}</span>
+        </button>
+        {topOpen && (
+          <div className="border-t border-border px-3 pb-3">
+            {topLoading ? (
+              <p className="pt-3 text-xs text-text-muted">Loading…</p>
+            ) : !topChapters || topChapters.length === 0 ? (
+              <p className="pt-3 text-xs text-text-muted">No view data yet — views are tracked from chapter page visits.</p>
+            ) : (
+              <ol className="mt-2 space-y-1">
+                {topChapters.map((c, i) => (
+                  <li key={c.chapterNumber} className="flex items-center gap-2 text-xs">
+                    <span className="w-4 shrink-0 text-right tabular-nums text-text-disabled">{i + 1}</span>
+                    <span className="flex-1 truncate text-text-secondary">
+                      Ch.{c.chapterNumber} — {c.title}
+                    </span>
+                    <span className="shrink-0 tabular-nums text-text-muted">
+                      {c.views.toLocaleString()} views
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
         )}
       </div>
 

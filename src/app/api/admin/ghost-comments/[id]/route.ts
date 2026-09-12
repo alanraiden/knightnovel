@@ -9,6 +9,8 @@ const patchSchema = z.object({
   displayName: z.string().min(1).max(40).optional(),
   createdAt: z.string().optional(),
   status: z.enum(["visible", "hidden", "removed"]).optional(),
+  // null = remove existing image; a URL string = set/replace; undefined = leave unchanged
+  stickerUrl: z.string().url().nullable().optional(),
 });
 
 // Collect all descendant comment IDs for a given parent ID.
@@ -104,6 +106,8 @@ export async function PATCH(
     if (parsed.data.displayName !== undefined) updates.displayName = parsed.data.displayName;
     if (parsed.data.status !== undefined) updates.status = parsed.data.status;
     if (parsed.data.createdAt !== undefined) updates.createdAt = new Date(parsed.data.createdAt);
+    // stickerUrl: null clears the image, a URL string sets/replaces it
+    if (parsed.data.stickerUrl !== undefined) updates.stickerUrl = parsed.data.stickerUrl;
 
     await comments.updateOne({ _id: new ObjectId(params.id) }, { $set: updates });
 

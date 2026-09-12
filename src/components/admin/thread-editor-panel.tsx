@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
-import { Lock, Eye, EyeOff, Trash2, Plus, ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
+import { useState, useCallback, useEffect, useRef } from "react";
+import { Lock, Eye, EyeOff, Trash2, Plus, ChevronDown, ChevronRight, AlertTriangle, ImagePlus, X } from "lucide-react";
 import type { NovelView } from "@/lib/queries";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -36,7 +36,6 @@ function toLocalDatetimeValue(iso: string): string {
 }
 
 function buildTree(flat: AdminCommentView[]): AdminCommentView[] {
-  // Return top-level comments sorted by createdAt; children are accessed via flat list
   return flat.filter((c) => c.parentId === null).sort(
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
   );
@@ -46,6 +45,113 @@ function childrenOf(id: string, flat: AdminCommentView[]): AdminCommentView[] {
   return flat
     .filter((c) => c.parentId === id)
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+}
+
+// ── StickerPicker ──────────────────────────────────────────────────────────
+// Reusable image-upload widget for ghost comment forms.
+// Uploads to /api/uploads/sticker (Sharp → WebP → R2) and calls onChange with
+// the resulting CDN URL. Passes null when the image is cleared.
+// Exported so ghost-comment-form and ghost-discussion-form can import it
+// without creating a separate file.
+
+export function StickerPicker({
+  value,
+  onChange,
+  compact = false,
+}: {
+  value: string | null;
+  onChange: (url: string | null) => void;
+  /** When true, uses a smaller button style for use inside inline compose forms. */
+  compact?: boolean;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState("");
+
+  const upload = async (file: File) => {
+    setUploading(true);
+    setError("");
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/uploads/sticker", { method: "POST", body: form });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+      onChange(data.url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) upload(file);
+    // reset so the same file can be re-selected after clearing
+    e.target.value = "";
+  };
+
+  return (
+    <div className="space-y-1.5">
+      {value ? (
+        /* Preview with remove button */
+        <div className="flex items-start gap-2">
+          <div className="relative inline-block">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={value}
+              alt="Attached image"
+              className="max-h-20 max-w-[120px] rounded border border-border object-contain"
+            />
+            <button
+              type="button"
+              onClick={() => onChange(null)}
+              title="Remove image"
+              className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-surface-alt border border-border text-text-muted hover:bg-status-error hover:text-white transition-colors"
+            >
+              <X size={9} />
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            disabled={uploading}
+            className={`text-[11px] text-accent hover:underline disabled:opacity-40 ${compact ? "mt-1" : ""}`}
+          >
+            Replace
+          </button>
+        </div>
+      ) : (
+        /* Upload trigger */
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={uploading}
+          className={`flex items-center gap-1.5 rounded border border-dashed border-border text-text-muted transition-colors hover:border-border-hover hover:text-text-secondary disabled:opacity-40 ${
+            compact
+              ? "px-2 py-1 text-[11px]"
+              : "px-3 py-1.5 text-xs"
+          }`}
+        >
+          <ImagePlus size={compact ? 11 : 13} />
+          {uploading ? "Uploading…" : "Attach image"}
+        </button>
+      )}
+
+      {/* Hidden file input */}
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif"
+        className="hidden"
+        onChange={handleFile}
+      />
+
+      {/* Upload error */}
+      {error && <p className="text-[11px] text-status-error">{error}</p>}
+    </div>
+  );
 }
 
 // ── Inline compose form ────────────────────────────────────────────────────
@@ -65,6 +171,7 @@ function ComposeForm({
 }) {
   const [displayName, setDisplayName] = useState("");
   const [body, setBody] = useState("");
+  const [stickerUrl, setStickerUrl] = useState<string | null>(null);
   const [when, setWhen] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -83,6 +190,7 @@ function ComposeForm({
           parentId: parentId || undefined,
           displayName: displayName.trim(),
           body: body.trim(),
+          stickerUrl: stickerUrl ?? undefined,
           createdAt: when ? new Date(when).toISOString() : new Date().toISOString(),
         }),
       });
@@ -93,12 +201,14 @@ function ComposeForm({
         parentId,
         displayName: displayName.trim(),
         body: body.trim(),
+        stickerUrl: stickerUrl ?? undefined,
         createdAt: when ? new Date(when).toISOString() : new Date().toISOString(),
         status: "visible",
         isGhost: true,
       });
       setDisplayName("");
       setBody("");
+      setStickerUrl(null);
       setWhen("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to post.");
@@ -131,6 +241,7 @@ function ComposeForm({
         placeholder="Write the comment…"
         className="w-full rounded border border-border bg-card px-2 py-1.5 text-xs text-text-primary placeholder:text-text-muted"
       />
+      <StickerPicker value={stickerUrl} onChange={setStickerUrl} compact />
       {error && <p className="text-[11px] text-status-error">{error}</p>}
       <div className="flex gap-2">
         <button
@@ -176,6 +287,7 @@ function CommentRow({
   const [body, setBody] = useState(comment.body);
   const [displayName, setDisplayName] = useState(comment.displayName);
   const [createdAt, setCreatedAt] = useState(toLocalDatetimeValue(comment.createdAt));
+  const [stickerUrl, setStickerUrl] = useState<string | null>(comment.stickerUrl ?? null);
   const [savingEdit, setSavingEdit] = useState(false);
   const [hiding, setHiding] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -198,6 +310,8 @@ function CommentRow({
           body: body.trim(),
           displayName: displayName.trim(),
           createdAt: createdAt ? new Date(createdAt).toISOString() : undefined,
+          // Pass null explicitly to clear an existing image
+          stickerUrl: stickerUrl,
         }),
       });
       const data = await res.json();
@@ -206,6 +320,7 @@ function CommentRow({
         body: body.trim(),
         displayName: displayName.trim(),
         createdAt: createdAt ? new Date(createdAt).toISOString() : comment.createdAt,
+        stickerUrl: stickerUrl ?? undefined,
       });
       setEditing(false);
     } catch (err) {
@@ -220,8 +335,6 @@ function CommentRow({
     setError("");
     const newStatus = isHidden ? "visible" : "hidden";
     try {
-      // For hide: use DELETE (default soft-hide, cascades to children)
-      // For restore: use PATCH status only
       let res: Response;
       if (newStatus === "hidden") {
         res = await fetch(`/api/admin/ghost-comments/${comment.id}`, { method: "DELETE" });
@@ -234,9 +347,7 @@ function CommentRow({
       }
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed.");
-      // For hide, update affected count in local state
       if (newStatus === "hidden") {
-        // Collect this comment + all descendants to update locally
         const allDescendants = collectAllDescendants(comment.id, flat);
         onRemove(comment.id, [comment.id, ...allDescendants]);
       } else {
@@ -377,6 +488,7 @@ function CommentRow({
               rows={3}
               className="w-full rounded border border-border bg-card px-1.5 py-1 text-xs text-text-primary"
             />
+            <StickerPicker value={stickerUrl} onChange={setStickerUrl} compact />
             {error && <p className="text-[11px] text-status-error">{error}</p>}
             <div className="flex gap-2">
               <button
@@ -391,6 +503,7 @@ function CommentRow({
                   setBody(comment.body);
                   setDisplayName(comment.displayName);
                   setCreatedAt(toLocalDatetimeValue(comment.createdAt));
+                  setStickerUrl(comment.stickerUrl ?? null);
                   setEditing(false);
                   setError("");
                 }}
@@ -407,7 +520,8 @@ function CommentRow({
           </p>
         )}
 
-        {comment.stickerUrl && (
+        {/* Sticker / attached image — shown in read-only view */}
+        {!editing && comment.stickerUrl && (
           <img
             src={comment.stickerUrl}
             alt="Attached image"
@@ -535,8 +649,6 @@ export function ThreadEditorPanel({
   }, []);
 
   const handleRemove = useCallback((_id: string, affectedIds: string[]) => {
-    // For soft-hide: mark as hidden in local state rather than remove,
-    // so the admin can still see them and restore if needed
     setFlat((prev) =>
       prev.map((c) =>
         affectedIds.includes(c.id) ? { ...c, status: "hidden" as const } : c

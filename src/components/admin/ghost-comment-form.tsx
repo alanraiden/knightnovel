@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type { NovelView } from "@/lib/queries";
 import { BulkGhostImport } from "@/components/admin/bulk-ghost-import";
-import { ThreadEditorPanel } from "@/components/admin/thread-editor-panel";
+import { ThreadEditorPanel, StickerPicker } from "@/components/admin/thread-editor-panel";
 
 interface ChapterOption {
   id: string;
@@ -21,6 +21,7 @@ export function GhostCommentForm({ novels }: { novels: NovelView[] }) {
   const [displayName, setDisplayName] = useState("");
   const [body, setBody] = useState("");
   const [when, setWhen] = useState("");
+  const [stickerUrl, setStickerUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -46,6 +47,7 @@ export function GhostCommentForm({ novels }: { novels: NovelView[] }) {
           title: !chapterId ? discussionTitle || undefined : undefined,
           category: !chapterId ? category : undefined,
           body,
+          stickerUrl: stickerUrl ?? undefined,
           createdAt: when || new Date().toISOString(),
         }),
       });
@@ -55,6 +57,7 @@ export function GhostCommentForm({ novels }: { novels: NovelView[] }) {
       setDisplayName("");
       setBody("");
       setWhen("");
+      setStickerUrl(null);
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : "Failed to post.");
       setStatus("error");
@@ -190,6 +193,13 @@ export function GhostCommentForm({ novels }: { novels: NovelView[] }) {
                 className="w-full rounded border border-border bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted"
                 placeholder="Write the comment as it should appear to visitors…"
               />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs text-text-secondary">
+                Image <span className="text-text-disabled">(optional — uploaded via Cloudflare R2)</span>
+              </label>
+              <StickerPicker value={stickerUrl} onChange={setStickerUrl} />
             </div>
 
             <button

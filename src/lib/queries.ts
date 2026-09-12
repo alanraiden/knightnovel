@@ -494,6 +494,8 @@ export interface ChapterListItem {
   title: string;
   status: "published" | "draft";
   wordCount: number;
+  /** All-time view count from chapters.views — incremented on every chapter page load. */
+  views: number;
   /** True when the stored content is the default placeholder text, not real chapter content. */
   isPlaceholder: boolean;
 }
@@ -993,6 +995,125 @@ export async function incrementNovelViews(novelSlug: string): Promise<void> {
   }
 }
 
+// Fire-and-forget chapter-level view increment. Mirrors incrementNovelViews().
+// Called from the chapter page alongside the novel increment — the two writes
+// are independent so either can fail without affecting the other.
+// chapterId must be the ObjectId string of the chapter document (i.e. the real
+// DB-backed id from getChapterContent(), not the composite demo fallback).
+export async function incrementChapterViews(chapterId: string): Promise<void> {
+  if (!hasDb() || !ObjectId.isValid(chapterId)) return;
+  try {
+    const { chapters } = await collections();
+    await chapters.updateOne(
+      { _id: new ObjectId(chapterId) },
+      { $inc: { views: 1 } }
+    );
+  } catch (err) {
+    console.error("[queries] incrementChapterViews:", err);
+  }
+}
+
+// Returns the top `limit` chapters for a given novel, sorted by all-time views.
+// Used by the admin chapter list — no new collection or schema change required;
+// chapters.views is part of the existing schema and was always 0 before
+// incrementChapterViews() started being called.
+export async function getTopChaptersByViews(
+  novelSlug: string,
+  limit = 10
+): Promise<{ chapterNumber: number; title: string; views: number }[]> {
+  if (!hasDb()) return [];
+  try {
+    const { novels, chapters } = await collections();
+    const novel = await novels.findOne({ slug: novelSlug }, { projection: { _id: 1 } });
+    if (!novel) return [];
+    const docs = await chapters
+      .find({ novelId: novel._id, status: "published" })
+      .sort({ views: -1 })
+      .limit(limit)
+      .project({ chapterNumber: 1, title: 1, views: 1 })
+      .toArray();
+    return docs.map((d) => ({
+      chapterNumber: d.chapterNumber,
+      title: d.title,
+      views: d.views ?? 0,
+    }));
+  } catch (err) {
+    console.error("[queries] getTopChaptersByViews — returning empty list:", err);
+    return [];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Novel-level analytics for the admin Analytics page.
+// Returns raw (numeric) counters from the novel document so the UI can
+// format and display them however it likes. Intentionally separate from
+// fromMongo() which formats counters as display strings for the public UI.
+// ---------------------------------------------------------------------------
+
+export interface NovelAnalytics {
+  slug: string;
+  title: string;
+  cover: string;
+  status: string;
+  chapterCount: number;
+  wordCount: number;
+  viewsTotal: number;
+  viewsWeekly: number;
+  viewsMonthly: number;
+  favorites: number;
+  ratingAvg: number;
+  ratingCount: number;
+  commentCount: number;
+  createdAt: string;
+  lastChapterAddedAt: string;
+}
+
+export async function getNovelAnalytics(slug: string): Promise<NovelAnalytics | null> {
+  if (!hasDb()) return null;
+  try {
+    const { novels } = await collections();
+    const doc = await novels.findOne({ slug });
+    if (!doc) return null;
+    return {
+      slug: doc.slug,
+      title: doc.title,
+      cover: doc.coverImageUrl || "",
+      status: doc.status,
+      chapterCount: doc.chapterCount ?? 0,
+      wordCount: doc.wordCount ?? 0,
+      viewsTotal: doc.counters?.viewsTotal ?? 0,
+      viewsWeekly: doc.counters?.viewsWeekly ?? 0,
+      viewsMonthly: doc.counters?.viewsMonthly ?? 0,
+      favorites: doc.counters?.favorites ?? 0,
+      ratingAvg: doc.counters?.ratingAvg ?? 0,
+      ratingCount: doc.counters?.ratingCount ?? 0,
+      commentCount: doc.counters?.commentCount ?? 0,
+      createdAt: (doc.createdAt ?? new Date()).toISOString(),
+      lastChapterAddedAt: (doc.lastChapterAddedAt ?? doc.createdAt ?? new Date()).toISOString(),
+    };
+  } catch (err) {
+    console.error("[queries] getNovelAnalytics:", err);
+    return null;
+  }
+}
+
+// Minimal novel list for the analytics novel selector — slug + title only,
+// sorted by total views descending so the most-read novels appear first.
+export async function getNovelListForAnalytics(): Promise<{ slug: string; title: string }[]> {
+  if (!hasDb()) return [];
+  try {
+    const { novels } = await collections();
+    const docs = await novels
+      .find({}, { projection: { slug: 1, title: 1, "counters.viewsTotal": 1 } })
+      .sort({ "counters.viewsTotal": -1 })
+      .toArray();
+    return docs.map((d) => ({ slug: d.slug, title: d.title }));
+  } catch (err) {
+    console.error("[queries] getNovelListForAnalytics:", err);
+    return [];
+  }
+}
+
 export async function getChaptersForAdmin(slug: string): Promise<ChapterListItem[]> {
   if (!hasDb()) return [];
   // Unique substring present in the default placeholder content that is shown
@@ -1009,7 +1130,7 @@ export async function getChaptersForAdmin(slug: string): Promise<ChapterListItem
     const docs = await chapters
       .find({ novelId: novel._id })
       .sort({ chapterNumber: 1 })
-      .project({ content: 1, wordCount: 1, chapterNumber: 1, title: 1, status: 1 })
+      .project({ content: 1, wordCount: 1, chapterNumber: 1, title: 1, status: 1, views: 1 })
       .toArray();
     return docs.map((d) => {
       const preview = typeof d.content === "string" ? d.content.slice(0, 120) : "";
@@ -1019,6 +1140,7 @@ export async function getChaptersForAdmin(slug: string): Promise<ChapterListItem
         title: d.title,
         status: d.status,
         wordCount: d.wordCount ?? 0,
+        views: d.views ?? 0,
         isPlaceholder: preview.includes(PLACEHOLDER_MARKER),
       };
     });
