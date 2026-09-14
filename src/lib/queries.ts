@@ -45,17 +45,19 @@ function fromMongo(doc: Novel & { _id: ObjectId }): NovelView {
   };
 }
 
-export async function getAllNovels(): Promise<NovelView[]> {
+export async function getAllNovels(limit?: number): Promise<NovelView[]> {
   if (hasDb()) {
     try {
       const { novels } = await collections();
-      const docs = await novels.find({}).toArray();
+      const cursor = novels.find({});
+      if (limit) cursor.limit(limit);
+      const docs = await cursor.toArray();
       if (docs.length) return docs.map((d) => fromMongo(d as Novel & { _id: ObjectId }));
     } catch (err) {
       console.error("[queries] getAllNovels — falling back to demo data:", err);
     }
   }
-  return demoNovels;
+  return limit ? demoNovels.slice(0, limit) : demoNovels;
 }
 
 export async function getNovelBySlug(slug: string): Promise<NovelView | undefined> {

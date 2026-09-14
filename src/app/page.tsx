@@ -28,7 +28,7 @@ export default async function HomePage() {
   const [featured, highlights, trending, rankings, newlyAdded, recentlyUpdated, discussions] =
     await Promise.all([
       getFeatured(5),
-      getAllNovels(),
+      getAllNovels(23),
       getTrending(5),
       getRankingsForPeriod("day", 5),
       getNewlyAdded(5),
