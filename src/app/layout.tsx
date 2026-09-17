@@ -44,6 +44,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           crossOrigin="anonymous"
           strategy="afterInteractive"
         />
+        {/* Google Analytics (GA4) */}
+        <Script
+          async
+          src="https://www.googletagmanager.com/gtag/js?id=G-RVQXNLJ9J7"
+          strategy="afterInteractive"
+        />
+        <Script id="google-analytics" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-RVQXNLJ9J7');
+          `}
+        </Script>
       </head>
       <body className="min-h-screen antialiased">
         <Providers>

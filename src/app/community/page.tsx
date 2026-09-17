@@ -19,7 +19,7 @@ export function generateMetadata({ searchParams }: { searchParams: { thread?: st
 
 export default async function CommunityPage() {
   const [discussions, popularTags, topContributors, mostActiveNovels, trendingNovels, novels] = await Promise.all([
-    getTopDiscussions(50, "recent"),
+    getTopDiscussions(20, "recent"),
     getPopularTags(10),
     getTopContributors(6),
     getMostActiveNovels(3),
