@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { collections } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth-helpers";
+import { notifyIndexNow } from "@/lib/indexnow";
 import { z } from "zod";
 
 const updateSchema = z.object({
@@ -29,6 +30,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { slug: stri
       { $set: { ...parsed.data, updatedAt: new Date() } }
     );
     if (result.matchedCount === 0) return NextResponse.json({ error: "Novel not found." }, { status: 404 });
+
+    // Notify search engines: novel metadata (title, cover, status, etc.) changed.
+    void notifyIndexNow(`/novel/${params.slug}`);
+
     return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json(
@@ -49,6 +54,9 @@ export async function DELETE(_req: NextRequest, { params }: { params: { slug: st
 
     await chapters.deleteMany({ novelId: novel._id });
     await novels.deleteOne({ _id: novel._id });
+
+    // Notify search engines that the novel page is gone (prompts recrawl + removal).
+    void notifyIndexNow(`/novel/${params.slug}`);
 
     return NextResponse.json({ ok: true });
   } catch {

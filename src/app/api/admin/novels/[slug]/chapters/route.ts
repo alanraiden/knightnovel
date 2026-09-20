@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { collections } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { filterUsersByNotificationPref } from "@/lib/queries";
+import { notifyIndexNow } from "@/lib/indexnow";
 import { z } from "zod";
 
 export async function GET(_req: NextRequest, { params }: { params: { slug: string } }) {
@@ -118,6 +119,15 @@ export async function POST(req: NextRequest, { params }: { params: { slug: strin
         );
       }
     }
+
+    // Notify search engines about the newly published/updated chapters and the
+    // parent novel page (its lastChapterAddedAt timestamp changed).
+    // Fire-and-forget: awaited internally but never throws — publishing succeeds
+    // even if IndexNow is unreachable.
+    void notifyIndexNow([
+      ...docs.map((d) => `/novel/${novel.slug}/chapter/${d.chapterNumber}`),
+      `/novel/${novel.slug}`,
+    ]);
 
     return NextResponse.json({ ok: true, added: docs.length, totalChapters });
   } catch {
