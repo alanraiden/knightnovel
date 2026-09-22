@@ -11,10 +11,10 @@ const links = [
 
 export function Footer() {
   return (
-    <footer className="hidden border-t border-border bg-surface md:block">
+    <footer className="border-t border-border bg-surface pb-20 md:pb-0">
       <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-4 py-6 text-xs text-text-muted sm:flex-row">
         <p>© {new Date().getFullYear()} Knight Novel. All rights reserved.</p>
-        <div className="flex gap-5">
+        <div className="flex flex-wrap justify-center gap-5 sm:justify-end">
           {links.map((l) => (
             <Link key={l.href} href={l.href} className="hover:text-text-secondary">
               {l.label}

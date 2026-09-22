@@ -65,89 +65,110 @@ export function FilterDrawer({
       </button>
 
       {open && (
-        <div className="glass fixed inset-x-4 top-20 z-30 w-auto rounded-card p-4 shadow-2xl animate-slide-up sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-[320px]">
-          <p className="mb-2 text-xs font-medium text-text-primary">Status</p>
-          <div className="mb-4 flex flex-wrap gap-2">
-            {statuses.map((s) => (
-              <Chip key={s} active={filters.status.includes(s)} onClick={() => toggle("status", s)}>
-                {s[0].toUpperCase() + s.slice(1)}
-              </Chip>
-            ))}
-          </div>
+        <>
+          {/* Backdrop — mobile only, tap outside to close */}
+          <div
+            className="fixed inset-0 z-20 sm:hidden"
+            onClick={() => setOpen(false)}
+          />
 
-          <p className="mb-2 text-xs font-medium text-text-primary">Genre</p>
-          <div className="mb-4 flex max-h-24 flex-wrap gap-2 overflow-y-auto themed-scroll">
-            {GENRES.map((g) => (
-              <Chip key={g} active={filters.genres.includes(g)} onClick={() => toggle("genres", g)}>
-                {g}
-              </Chip>
-            ))}
-          </div>
-
-          <p className="mb-2 text-xs font-medium text-text-primary">Tags</p>
-          <div className="relative mb-2">
-            <div
-              onClick={() => setTagOpen(true)}
-              className="flex cursor-text items-center justify-between rounded border border-border-hover bg-card px-2.5 py-1.5"
-            >
-              <input
-                value={tagQuery}
-                onChange={(e) => {
-                  setTagQuery(e.target.value);
-                  setTagOpen(true);
-                }}
-                onFocus={() => setTagOpen(true)}
-                placeholder="Search tags…"
-                className="w-full bg-transparent text-xs text-text-primary placeholder:text-text-muted focus:outline-none"
-              />
-              <ChevronDown size={13} className="text-text-muted" />
-            </div>
-            {tagOpen && filteredTags.length > 0 && (
-              <div className="absolute z-10 mt-1 max-h-40 w-full overflow-y-auto rounded border border-border bg-card themed-scroll">
-                {filteredTags.map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => addTag(t)}
-                    className="block w-full px-2.5 py-1.5 text-left text-xs text-text-secondary hover:bg-surface"
-                  >
-                    {t}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="mb-4 flex flex-wrap gap-1.5">
-            {filters.tags.map((t) => (
-              <span
-                key={t}
-                className="flex items-center gap-1 rounded bg-card px-2 py-1 text-[10px] text-text-secondary"
+          {/* Filter panel */}
+          <div className="glass fixed inset-x-4 top-20 z-30 w-auto rounded-card p-4 shadow-2xl animate-slide-up sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-[320px]">
+            {/* Header with close button */}
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-xs font-semibold text-text-primary">Filters</p>
+              <button
+                onClick={() => setOpen(false)}
+                aria-label="Close filters"
+                className="rounded p-1 text-text-muted transition-colors hover:bg-surface hover:text-text-primary"
               >
-                {t}
-                <button onClick={() => removeTag(t)} aria-label={`Remove ${t}`}>
-                  <X size={10} />
-                </button>
-              </span>
-            ))}
-          </div>
+                <X size={14} />
+              </button>
+            </div>
 
-          <p className="mb-2 text-xs font-medium text-text-primary">Sort</p>
-          <div className="mb-4 flex flex-wrap gap-2">
-            {sorts.map((s) => (
-              <Chip key={s} active={filters.sort === s} onClick={() => onChange({ ...filters, sort: s })}>
-                {s}
-              </Chip>
-            ))}
-          </div>
+            <p className="mb-2 text-xs font-medium text-text-primary">Status</p>
+            <div className="mb-4 flex flex-wrap gap-2">
+              {statuses.map((s) => (
+                <Chip key={s} active={filters.status.includes(s)} onClick={() => toggle("status", s)}>
+                  {s[0].toUpperCase() + s.slice(1)}
+                </Chip>
+              ))}
+            </div>
 
-          <p className="mb-2 text-xs font-medium text-text-primary">Country</p>
-          <div className="flex flex-wrap gap-2">
-            {countries.map((c) => (
-              <Chip key={c} active={filters.country.includes(c)} onClick={() => toggle("country", c)}>
-                {c}
-              </Chip>
-            ))}
+            <p className="mb-2 text-xs font-medium text-text-primary">Genre</p>
+            <div className="mb-4 flex max-h-24 flex-wrap gap-2 overflow-y-auto themed-scroll">
+              {GENRES.map((g) => (
+                <Chip key={g} active={filters.genres.includes(g)} onClick={() => toggle("genres", g)}>
+                  {g}
+                </Chip>
+              ))}
+            </div>
+
+            <p className="mb-2 text-xs font-medium text-text-primary">Tags</p>
+            <div className="relative mb-2">
+              <div
+                onClick={() => setTagOpen(true)}
+                className="flex cursor-text items-center justify-between rounded border border-border-hover bg-card px-2.5 py-1.5"
+              >
+                <input
+                  value={tagQuery}
+                  onChange={(e) => {
+                    setTagQuery(e.target.value);
+                    setTagOpen(true);
+                  }}
+                  onFocus={() => setTagOpen(true)}
+                  placeholder="Search tags…"
+                  className="w-full bg-transparent text-xs text-text-primary placeholder:text-text-muted focus:outline-none"
+                />
+                <ChevronDown size={13} className="text-text-muted" />
+              </div>
+              {tagOpen && filteredTags.length > 0 && (
+                <div className="absolute z-10 mt-1 max-h-40 w-full overflow-y-auto rounded border border-border bg-card themed-scroll">
+                  {filteredTags.map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => addTag(t)}
+                      className="block w-full px-2.5 py-1.5 text-left text-xs text-text-secondary hover:bg-surface"
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="mb-4 flex flex-wrap gap-1.5">
+              {filters.tags.map((t) => (
+                <span
+                  key={t}
+                  className="flex items-center gap-1 rounded bg-card px-2 py-1 text-[10px] text-text-secondary"
+                >
+                  {t}
+                  <button onClick={() => removeTag(t)} aria-label={`Remove ${t}`}>
+                    <X size={10} />
+                  </button>
+                </span>
+              ))}
+            </div>
+
+            <p className="mb-2 text-xs font-medium text-text-primary">Sort</p>
+            <div className="mb-4 flex flex-wrap gap-2">
+              {sorts.map((s) => (
+                <Chip key={s} active={filters.sort === s} onClick={() => onChange({ ...filters, sort: s })}>
+                  {s}
+                </Chip>
+              ))}
+            </div>
+
+            <p className="mb-2 text-xs font-medium text-text-primary">Country</p>
+            <div className="flex flex-wrap gap-2">
+              {countries.map((c) => (
+                <Chip key={c} active={filters.country.includes(c)} onClick={() => toggle("country", c)}>
+                  {c}
+                </Chip>
+              ))}
+            </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );
