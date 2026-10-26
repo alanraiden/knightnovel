@@ -19,7 +19,16 @@ export async function POST(_req: NextRequest, { params }: { params: { slug: stri
     const novel = await novels.findOne({ slug: params.slug });
     if (!novel) return NextResponse.json({ error: "Novel not found." }, { status: 404 });
 
-    const realCount = await chapters.countDocuments({ novelId: novel._id });
+    // Count DISTINCT published chapter numbers — mirrors the definition used
+    // by the chapter upload API and the public chapter listing.
+    // Raw countDocuments() would count duplicate chapter docs as separate
+    // entries, re-inflating chapterCount instead of fixing it.
+    const [ccRow] = await chapters.aggregate([
+      { $match: { novelId: novel._id, status: "published" } },
+      { $group: { _id: "$chapterNumber" } },
+      { $count: "count" },
+    ]).toArray();
+    const realCount: number = ccRow?.count ?? 0;
     await novels.updateOne(
       { _id: novel._id },
       { $set: { chapterCount: realCount, updatedAt: new Date() } }

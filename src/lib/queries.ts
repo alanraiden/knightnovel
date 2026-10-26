@@ -158,7 +158,10 @@ export async function getChapterContent(
       const { novels, chapters } = await collections();
       const novel = await novels.findOne({ slug });
       if (novel) {
-        const chapter = await chapters.findOne({ novelId: novel._id, chapterNumber });
+        // Filter by status: "published" so draft chapters are never served
+        // to public readers. The chapter page's dbConnected && !chapterDoc
+        // guard will call notFound() for any unpublished chapter number.
+        const chapter = await chapters.findOne({ novelId: novel._id, chapterNumber, status: "published" });
         if (chapter) return { id: chapter._id!.toString(), title: chapter.title, content: chapter.content };
       }
     } catch (err) {

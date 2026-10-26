@@ -83,7 +83,15 @@ export async function POST(req: NextRequest, { params }: { params: { slug: strin
       );
     }
 
-    const totalChapters = await chapters.countDocuments({ novelId: novel._id });
+    // Count DISTINCT published chapter numbers — not raw document count.
+    // Using countDocuments() here would let duplicate inserts inflate chapterCount
+    // (e.g. two docs for Ch.224 would count as 2 toward the total).
+    const [ccRow] = await chapters.aggregate([
+      { $match: { novelId: novel._id, status: "published" } },
+      { $group: { _id: "$chapterNumber" } },
+      { $count: "count" },
+    ]).toArray();
+    const totalChapters: number = ccRow?.count ?? 0;
     await novels.updateOne(
       { _id: novel._id },
       { $set: { chapterCount: totalChapters, lastChapterAddedAt: now, updatedAt: now } }
@@ -129,7 +137,7 @@ export async function POST(req: NextRequest, { params }: { params: { slug: strin
       `/novel/${novel.slug}`,
     ]);
 
-    return NextResponse.json({ ok: true, added: docs.length, totalChapters });
+    return NextResponse.json({ ok: true, added: docs.length, totalChapters });  // totalChapters = distinct published chapters
   } catch {
     return NextResponse.json(
       { error: "Database not configured. Set MONGODB_URI in .env.local." },

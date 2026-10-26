@@ -8,6 +8,35 @@ import { cn } from "@/lib/utils";
 const PAGE_SIZE = 30;
 const MAX_PAGE_BUTTONS = 5;
 
+// ─── API shape from /api/novels/[slug]/chapters ───────────────────────────────
+interface ApiChapter {
+  chapterNumber: number;
+  title: string;
+}
+
+interface ApiResponse {
+  chapters: ApiChapter[];
+  totalChapters: number;
+  hasMore: boolean;
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+/**
+ * Renders a paginated list of published chapter links.
+ *
+ * Previously this component received only a `chapterCount` number and built a
+ * synthetic [1 … chapterCount] array of links — never querying which chapters
+ * actually exist. That caused two bugs:
+ *   1. `chapterCount` could be inflated by duplicate DB documents (e.g. 418
+ *      when the real highest published chapter is 413), generating broken links.
+ *   2. Gaps in the chapter sequence (deleted or skipped numbers) would produce
+ *      links that 404.
+ *
+ * The fix: fetch real chapter numbers from /api/novels/[slug]/chapters, which
+ * filters by status:"published" and returns actual records. The `chapterCount`
+ * prop is kept only for the display badge and as a fallback before the first
+ * fetch completes.
+ */
 export function ChapterList({ slug, chapterCount }: { slug: string; chapterCount: number }) {
   const [page, setPage] = useState(0);
   const [view, setView] = useState<"grid" | "list">("grid");
@@ -18,27 +47,54 @@ export function ChapterList({ slug, chapterCount }: { slug: string; chapterCount
     setView(window.innerWidth < 640 ? "list" : "grid");
   }, []);
 
-  const totalPages = Math.max(1, Math.ceil(chapterCount / PAGE_SIZE));
-  const start = page * PAGE_SIZE + 1;
-  const end = Math.min(chapterCount, start + PAGE_SIZE - 1);
-  const chapters = Array.from({ length: Math.max(0, end - start + 1) }, (_, i) => start + i);
+  // ── Fetch published chapter numbers from the API ──────────────────────────
+  // The API already paginates at PAGE_SIZE=30 and returns only published
+  // chapters, so we forward the current page index directly.
+  const [chapters, setChapters] = useState<number[]>([]);
+  const [totalPublished, setTotalPublished] = useState<number>(chapterCount);
+  const [loading, setLoading] = useState(true);
 
-  // Windowed page numbers: current page ± 2, so this stays readable even
-  // with hundreds of pages (500+ chapter novels).
+  useEffect(() => {
+    setLoading(true);
+    const apiPage = page + 1; // API is 1-indexed
+    fetch(`/api/novels/${slug}/chapters?page=${apiPage}`)
+      .then((r) => r.json())
+      .then((data: ApiResponse) => {
+        setChapters(data.chapters.map((c) => c.chapterNumber));
+        setTotalPublished(data.totalChapters);
+      })
+      .catch(() => {
+        // On error fall back to a synthetic range so the UI isn't blank.
+        // The links may 404 but that is no worse than the previous behaviour.
+        const start = page * PAGE_SIZE + 1;
+        const end = Math.min(chapterCount, start + PAGE_SIZE - 1);
+        setChapters(Array.from({ length: Math.max(0, end - start + 1) }, (_, i) => start + i));
+      })
+      .finally(() => setLoading(false));
+  }, [slug, page, chapterCount]);
+
+  // ── Pagination maths ──────────────────────────────────────────────────────
+  // Drive pagination from the live totalPublished count (not the stale prop).
+  const totalPages = Math.max(1, Math.ceil(totalPublished / PAGE_SIZE));
+
   const half = Math.floor(MAX_PAGE_BUTTONS / 2);
   let windowStart = Math.max(0, page - half);
   const windowEnd = Math.min(totalPages, windowStart + MAX_PAGE_BUTTONS);
   windowStart = Math.max(0, windowEnd - MAX_PAGE_BUTTONS);
   const pageNumbers = Array.from({ length: windowEnd - windowStart }, (_, i) => windowStart + i);
 
+  // Range label — use actual fetched numbers when available.
+  const firstNum = chapters[0] ?? page * PAGE_SIZE + 1;
+  const lastNum  = chapters[chapters.length - 1] ?? Math.min(totalPublished, (page + 1) * PAGE_SIZE);
+
   return (
     <div>
       <div className="mb-2 flex items-center justify-between">
         <p className="text-sm font-medium text-text-primary">
-          Chapters {start}–{end}
+          {loading ? "Loading…" : `Chapters ${firstNum}–${lastNum}`}
         </p>
         <div className="flex items-center gap-3">
-          <p className="text-xs text-text-muted">{chapterCount} total</p>
+          <p className="text-xs text-text-muted">{totalPublished} total</p>
           <div className="flex overflow-hidden rounded border border-border">
             <button
               onClick={() => setView("grid")}
@@ -58,7 +114,9 @@ export function ChapterList({ slug, chapterCount }: { slug: string; chapterCount
         </div>
       </div>
 
-      {view === "grid" ? (
+      {loading ? (
+        <div className="flex h-20 items-center justify-center text-xs text-text-muted">Loading chapters…</div>
+      ) : view === "grid" ? (
         <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
           {chapters.map((c) => (
             <Link
