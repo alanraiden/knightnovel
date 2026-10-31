@@ -25,6 +25,7 @@ export function CreateDiscussionModal({
   const [category, setCategory] = useState(categories[0]);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  const [isSpoiler, setIsSpoiler] = useState(false);
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState("");
 
@@ -46,13 +47,14 @@ export function CreateDiscussionModal({
           title,
           category,
           body,
-          isSpoiler: false,
+          isSpoiler,
           parentId: null,
         }),
       });
       if (!res.ok) throw new Error("Failed to post.");
       setTitle("");
       setBody("");
+      setIsSpoiler(false);
       onClose();
       router.refresh();
     } catch (err) {
@@ -103,9 +105,53 @@ export function CreateDiscussionModal({
           value={body}
           onChange={(e) => setBody(e.target.value)}
           rows={4}
-          placeholder="What's on your mind?"
+          placeholder="What&apos;s on your mind?"
           className="w-full rounded border border-border bg-card px-2.5 py-2 text-sm text-text-primary placeholder:text-text-muted"
         />
+
+        {/* Spoiler toggle */}
+        <label
+          htmlFor="spoiler-toggle"
+          className="flex cursor-pointer items-center gap-2.5 select-none"
+        >
+          <div className="relative flex-shrink-0">
+            <input
+              type="checkbox"
+              id="spoiler-toggle"
+              checked={isSpoiler}
+              onChange={(e) => setIsSpoiler(e.target.checked)}
+              className="sr-only"
+            />
+            <div
+              className={`flex h-4 w-4 items-center justify-center rounded border-2 transition-colors ${
+                isSpoiler
+                  ? "border-status-warning bg-status-warning"
+                  : "border-border bg-transparent"
+              }`}
+            >
+              {isSpoiler && (
+                <svg className="h-2.5 w-2.5" viewBox="0 0 10 10" fill="none">
+                  <path
+                    d="M1.5 5L4 7.5L8.5 2.5"
+                    stroke="#0a0f1c"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              )}
+            </div>
+          </div>
+          <span className="text-xs text-text-secondary">Mark as spoiler</span>
+        </label>
+
+        {isSpoiler && (
+          <p className="rounded border border-status-warning/40 bg-status-warning/10 px-3 py-2 text-xs text-status-warning">
+            ⚠ This post will appear in the <strong>Spoilers</strong> tab. The
+            body will be hidden behind a reveal prompt on the card.
+          </p>
+        )}
+
         {error && <p className="text-xs text-status-error">{error}</p>}
         <button
           onClick={submit}

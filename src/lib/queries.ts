@@ -663,6 +663,9 @@ export interface DiscussionView {
   bodyPreview: string;
   category: string | null;
   isPinned: boolean;
+  /** Spoiler flag — present on all documents returned by getDiscussionFeed;
+   *  undefined on older getTopDiscussions results (treat as false). */
+  isSpoiler?: boolean;
   novelSlug: string;
   novelTitle: string;
   novelCover: string;
@@ -691,52 +694,93 @@ export async function getTopDiscussions(
       .limit(limit * 2) // fetch extra since some may fail to resolve to a novel below
       .toArray();
 
+    if (!docs.length) return [];
+
+    // --- Batch resolve chapters (no N+1) ---
+    // Partition docs into novel-scoped and chapter-scoped.
+    const novelDocs  = docs.filter((d) => d.targetType === "novel");
+    const chapterDocs = docs.filter((d) => d.targetType === "chapter");
+
+    // Batch-fetch novels for novel-scoped posts (targetId is the slug).
+    const novelSlugs = [...new Set(novelDocs.map((d) => String(d.targetId)))];
+    const novelsBySlugArr = novelSlugs.length
+      ? await novels.find({ slug: { $in: novelSlugs } }).toArray()
+      : [];
+    const novelBySlug = new Map(novelsBySlugArr.map((n) => [String(n.slug), n]));
+
+    // Batch-fetch chapters for chapter-scoped posts (targetId is an ObjectId).
+    const chapterObjectIds = chapterDocs
+      .map((d) => String(d.targetId))
+      .filter((s) => ObjectId.isValid(s))
+      .map((s) => new ObjectId(s));
+    const chapterDocsArr = chapterObjectIds.length
+      ? await chapters.find({ _id: { $in: chapterObjectIds } }).toArray()
+      : [];
+    const chapterById = new Map(chapterDocsArr.map((c) => [c._id!.toString(), c]));
+
+    // Batch-fetch novels referenced by chapters.
+    const chapterNovelIds = [...new Set(chapterDocsArr.map((c) => (c.novelId as ObjectId).toString()))]
+      .map((s) => new ObjectId(s));
+    const novelsByIdArr = chapterNovelIds.length
+      ? await novels.find({ _id: { $in: chapterNovelIds } }).toArray()
+      : [];
+    const novelById = new Map(novelsByIdArr.map((n) => [n._id!.toString(), n]));
+
+    // Batch reply counts — one aggregation for all top-level comment ids.
+    const docIds = docs.map((d) => d._id as ObjectId);
+    const replyCountAgg = await comments
+      .aggregate([
+        { $match: { parentId: { $in: docIds }, status: "visible" } },
+        { $group: { _id: "$parentId", n: { $sum: 1 } } },
+      ])
+      .toArray();
+    const replyCountById = new Map(replyCountAgg.map((r) => [r._id.toString(), r.n as number]));
+
     const results: DiscussionView[] = [];
     for (const doc of docs) {
       if (results.length >= limit) break;
 
-      let novel = null;
+      let novel: (typeof novelsBySlugArr)[0] | undefined;
       let chapterNumber: number | null = null;
 
       if (doc.targetType === "novel") {
-        novel = await novels.findOne({ slug: String(doc.targetId) });
+        novel = novelBySlug.get(String(doc.targetId));
       } else {
         const targetIdStr = String(doc.targetId);
         if (ObjectId.isValid(targetIdStr)) {
-          const chapter = await chapters.findOne({ _id: new ObjectId(targetIdStr) });
+          const chapter = chapterById.get(targetIdStr);
           if (chapter) {
-            novel = await novels.findOne({ _id: chapter.novelId });
-            chapterNumber = chapter.chapterNumber;
+            novel = novelById.get((chapter.novelId as ObjectId).toString());
+            chapterNumber = chapter.chapterNumber as number;
           }
         } else {
           // Demo/no-chapter-doc fallback id looks like "{slug}-ch-{n}".
           const match = targetIdStr.match(/^(.+)-ch-(\d+)$/);
           if (match) {
-            novel = await novels.findOne({ slug: match[1] });
+            novel = novelBySlug.get(match[1]);
             chapterNumber = parseInt(match[2], 10);
           }
         }
       }
       if (!novel) continue;
 
-      const replyCount = await comments.countDocuments({ parentId: doc._id, status: "visible" });
-
       results.push({
-        id: doc._id!.toString(),
-        author: doc.displayName,
-        title: doc.title || doc.body.split("\n")[0].slice(0, 80),
-        bodyPreview: doc.body,
-        category: doc.targetType === "chapter" ? "Chapter" : doc.category || "Discussion",
+        id: (doc._id as ObjectId)!.toString(),
+        author: doc.displayName as string,
+        title: (doc.title as string | undefined) || (doc.body as string).split("\n")[0].slice(0, 80),
+        bodyPreview: doc.body as string,
+        category: doc.targetType === "chapter" ? "Chapter" : (doc.category as string | null) || "Discussion",
         isPinned: Boolean(doc.isPinned),
-        novelSlug: novel.slug,
-        novelTitle: novel.title,
-        novelCover: novel.coverImageUrl || "",
+        isSpoiler: Boolean(doc.isSpoiler),
+        novelSlug: novel.slug as string,
+        novelTitle: novel.title as string,
+        novelCover: (novel.coverImageUrl as string) || "",
         chapterNumber,
-        up: doc.votes?.up ?? 0,
-        down: doc.votes?.down ?? 0,
-        replyCount,
-        views: doc.views ?? 0,
-        createdAt: doc.createdAt.toISOString(),
+        up: (doc.votes as { up: number })?.up ?? 0,
+        down: (doc.votes as { down: number })?.down ?? 0,
+        replyCount: replyCountById.get((doc._id as ObjectId).toString()) ?? 0,
+        views: (doc.views as number) ?? 0,
+        createdAt: (doc.createdAt as Date).toISOString(),
       });
     }
     // Pinned discussions always float to the top, regardless of sort mode.
@@ -744,6 +788,251 @@ export async function getTopDiscussions(
   } catch (err) {
     console.error("[queries] getTopDiscussions — returning empty list:", err);
     return [];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Community page feed — aggregation-based, O(pages) not O(comments).
+// Replaces the N+1 getTopDiscussions for the community page itself;
+// getTopDiscussions is kept for backward compatibility.
+// ---------------------------------------------------------------------------
+
+export interface ChapterCommentView {
+  id: string;
+  author: string;
+  body: string;
+  stickerUrl?: string;
+  up: number;
+  down: number;
+  replyCount: number;
+  isSpoiler: boolean;
+  createdAt: string;
+  chapterNumber: number;
+  novelSlug: string;
+  novelTitle: string;
+  novelCover: string;
+}
+
+export interface FeedPage<T> {
+  items: T[];
+  total: number;
+  hasMore: boolean;
+}
+
+const FEED_PAGE_SIZE = 10;
+
+/**
+ * Discussions tab: top-level novel posts that have a non-empty title.
+ * Plain novel-page comments (no title) are excluded.
+ * Pass isSpoiler=true for the Spoilers tab.
+ * Uses batch lookups to avoid N+1 queries.
+ */
+export async function getDiscussionFeed(
+  opts: {
+    sort?: "newest" | "oldest" | "popular";
+    novelSlug?: string;
+    search?: string;
+    limit?: number;
+    offset?: number;
+    isSpoiler?: boolean;
+  } = {}
+): Promise<FeedPage<DiscussionView>> {
+  if (!hasDb()) return { items: [], total: 0, hasMore: false };
+  const { sort = "newest", novelSlug, search, limit = FEED_PAGE_SIZE, offset = 0, isSpoiler = false } = opts;
+
+  try {
+    const { comments, novels } = await collections();
+
+    const matchStage: Record<string, unknown> = {
+      targetType: "novel",
+      parentId: null,
+      status: "visible",
+      title: { $exists: true, $nin: [null, ""] },
+      isSpoiler: isSpoiler ? true : { $ne: true },
+    };
+    if (novelSlug) matchStage.targetId = novelSlug;
+    if (search) {
+      matchStage.$or = [
+        { title: { $regex: search, $options: "i" } },
+        { body:  { $regex: search, $options: "i" } },
+      ];
+    }
+
+    const sortStage: Record<string, 1 | -1> =
+      sort === "popular" ? { "votes.up": -1, createdAt: -1 }
+      : sort === "oldest" ? { createdAt: 1 }
+      : { createdAt: -1 };
+
+    // Count and first page run in parallel.
+    const [total, docs] = await Promise.all([
+      comments.countDocuments(matchStage),
+      comments.find(matchStage).sort(sortStage).skip(offset).limit(limit).toArray(),
+    ]);
+
+    if (!docs.length) return { items: [], total, hasMore: false };
+
+    // Batch-fetch novels — one query for all slugs on this page (no N+1).
+    const slugs = [...new Set(docs.map((d) => String(d.targetId)))];
+    const novelDocs = await novels.find({ slug: { $in: slugs } }).toArray();
+    const novelBySlug = new Map(novelDocs.map((n) => [n.slug as string, n]));
+
+    // Batch reply counts — one aggregation for all comments on this page.
+    const docIds = docs.map((d) => d._id as ObjectId);
+    const replyCountDocs = await comments
+      .aggregate([
+        { $match: { parentId: { $in: docIds }, status: "visible" } },
+        { $group: { _id: "$parentId", n: { $sum: 1 } } },
+      ])
+      .toArray();
+    const replyCountById = new Map(
+      replyCountDocs.map((r) => [r._id.toString(), r.n as number])
+    );
+
+    const items: DiscussionView[] = [];
+    for (const doc of docs) {
+      const novel = novelBySlug.get(String(doc.targetId));
+      if (!novel) continue; // novel was deleted — skip orphaned discussion
+      items.push({
+        id: (doc._id as ObjectId).toString(),
+        author: doc.displayName as string,
+        title: (doc.title as string) || "",
+        bodyPreview: doc.body as string,
+        category: (doc.category as string | null) ?? null,
+        isPinned: Boolean(doc.isPinned),
+        isSpoiler: Boolean(doc.isSpoiler),
+        novelSlug: novel.slug as string,
+        novelTitle: novel.title as string,
+        novelCover: (novel.coverImageUrl as string) || "",
+        chapterNumber: null,
+        up: (doc.votes as { up: number })?.up ?? 0,
+        down: (doc.votes as { down: number })?.down ?? 0,
+        replyCount: replyCountById.get((doc._id as ObjectId).toString()) ?? 0,
+        views: (doc.views as number) ?? 0,
+        createdAt: (doc.createdAt as Date).toISOString(),
+      });
+    }
+
+    // Pinned discussions always float to the top regardless of sort.
+    items.sort((a, b) => Number(b.isPinned) - Number(a.isPinned));
+
+    return { items, total, hasMore: offset + docs.length < total };
+  } catch (err) {
+    console.error("[queries] getDiscussionFeed:", err);
+    return { items: [], total: 0, hasMore: false };
+  }
+}
+
+/**
+ * Chapter Comments tab: latest top-level chapter comments across all novels.
+ * Sort/paginate on the comments index first, then batch-resolve chapter and
+ * novel metadata — O(1) round trips regardless of result count.
+ * When novelSlug is provided the chapter ids are pre-resolved so all
+ * filtering happens before the sort/paginate step.
+ */
+export async function getChapterCommentFeed(
+  opts: {
+    sort?: "newest" | "oldest" | "popular";
+    novelSlug?: string;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  } = {}
+): Promise<FeedPage<ChapterCommentView>> {
+  if (!hasDb()) return { items: [], total: 0, hasMore: false };
+  const { sort = "newest", novelSlug, search, limit = FEED_PAGE_SIZE, offset = 0 } = opts;
+
+  try {
+    const { comments, novels: novelsCol, chapters: chaptersCol } = await collections();
+
+    // Pre-resolve novelSlug → chapter ObjectIds so sorting and pagination
+    // happen entirely on the indexed comments collection.
+    let targetIdFilter: ObjectId[] | null = null;
+    if (novelSlug) {
+      const novel = await novelsCol.findOne({ slug: novelSlug }, { projection: { _id: 1 } });
+      if (!novel) return { items: [], total: 0, hasMore: false };
+      const chDocs = await chaptersCol
+        .find({ novelId: novel._id }, { projection: { _id: 1 } })
+        .toArray();
+      if (!chDocs.length) return { items: [], total: 0, hasMore: false };
+      targetIdFilter = chDocs.map((c) => c._id as ObjectId);
+    }
+
+    const matchStage: Record<string, unknown> = {
+      targetType: "chapter",
+      parentId: null,
+      status: "visible",
+    };
+    if (targetIdFilter) matchStage.targetId = { $in: targetIdFilter };
+    if (search) matchStage.body = { $regex: search, $options: "i" };
+
+    const sortStage: Record<string, 1 | -1> =
+      sort === "popular" ? { "votes.up": -1, createdAt: -1 }
+      : sort === "oldest" ? { createdAt: 1 }
+      : { createdAt: -1 };
+
+    const [total, docs] = await Promise.all([
+      comments.countDocuments(matchStage),
+      comments.find(matchStage).sort(sortStage).skip(offset).limit(limit).toArray(),
+    ]);
+
+    if (!docs.length) return { items: [], total, hasMore: false };
+
+    // Batch-resolve chapters (one query for all targetIds on this page).
+    const chapterIds = docs.map((d) => d.targetId as ObjectId);
+    const chapterDocs = await chaptersCol
+      .find({ _id: { $in: chapterIds } })
+      .project({ _id: 1, novelId: 1, chapterNumber: 1 })
+      .toArray();
+    const chapterById = new Map(chapterDocs.map((c) => [c._id.toString(), c]));
+
+    // Batch-resolve novels (deduplicated — many chapters may share one novel).
+    const novelIdStrs = [...new Set(chapterDocs.map((c) => (c.novelId as ObjectId).toString()))];
+    const novelIds = novelIdStrs.map((s) => new ObjectId(s));
+    const novelDocs2 = await novelsCol
+      .find({ _id: { $in: novelIds } })
+      .project({ _id: 1, slug: 1, title: 1, coverImageUrl: 1 })
+      .toArray();
+    const novelById = new Map(novelDocs2.map((n) => [n._id!.toString(), n]));
+
+    // Batch reply counts.
+    const docIds = docs.map((d) => d._id as ObjectId);
+    const replyCountDocs = await comments
+      .aggregate([
+        { $match: { parentId: { $in: docIds }, status: "visible" } },
+        { $group: { _id: "$parentId", n: { $sum: 1 } } },
+      ])
+      .toArray();
+    const replyCountById = new Map(
+      replyCountDocs.map((r) => [r._id.toString(), r.n as number])
+    );
+
+    const items: ChapterCommentView[] = [];
+    for (const doc of docs) {
+      const chapter = chapterById.get((doc.targetId as ObjectId).toString());
+      if (!chapter) continue; // chapter was deleted — skip orphaned comment
+      const novel = novelById.get((chapter.novelId as ObjectId).toString());
+      if (!novel) continue; // novel was deleted — skip
+      items.push({
+        id: (doc._id as ObjectId).toString(),
+        author: doc.displayName as string,
+        body: doc.body as string,
+        stickerUrl: doc.stickerUrl as string | undefined,
+        up: (doc.votes as { up: number })?.up ?? 0,
+        down: (doc.votes as { down: number })?.down ?? 0,
+        replyCount: replyCountById.get((doc._id as ObjectId).toString()) ?? 0,
+        isSpoiler: Boolean(doc.isSpoiler),
+        createdAt: (doc.createdAt as Date).toISOString(),
+        chapterNumber: chapter.chapterNumber as number,
+        novelSlug: novel.slug as string,
+        novelTitle: novel.title as string,
+        novelCover: (novel.coverImageUrl as string) || "",
+      });
+    }
+
+    return { items, total, hasMore: offset + docs.length < total };
+  } catch (err) {
+    console.error("[queries] getChapterCommentFeed:", err);
+    return { items: [], total: 0, hasMore: false };
   }
 }
 
@@ -792,43 +1081,80 @@ export async function getMostActiveNovels(limit = 5): Promise<{ novel: NovelView
   if (!hasDb()) return [];
   try {
     const { comments, chapters, novels } = await collections();
-    const docs = await comments
-      .find({ status: "visible" }, { projection: { targetType: 1, targetId: 1 } })
+
+    // --- Step 1: aggregate comment counts by novel slug (no N+1) ---
+    // Novel-scoped comments already carry the slug as targetId.
+    // For chapter-scoped comments we need to join chapters → novels.
+    //
+    // We run two aggregations and merge client-side to keep the pipeline
+    // simple and avoid a $lookup + $unionWith on comments (which MongoDB
+    // pre-5.0 does not support in the same pipeline).
+
+    // Novel-scoped comment counts.
+    const novelCountAgg = await comments
+      .aggregate([
+        { $match: { targetType: "novel", status: "visible" } },
+        { $group: { _id: "$targetId", count: { $sum: 1 } } },
+      ])
       .toArray();
 
     const countBySlug = new Map<string, number>();
-    const chapterNovelCache = new Map<string, string | null>();
+    for (const a of novelCountAgg) {
+      countBySlug.set(String(a._id), (countBySlug.get(String(a._id)) ?? 0) + (a.count as number));
+    }
 
-    for (const d of docs) {
-      let slug: string | null = null;
+    // Chapter-scoped comment counts — join chapters to get novelId, then novels to get slug.
+    const chapterCountAgg = await comments
+      .aggregate([
+        { $match: { targetType: "chapter", status: "visible" } },
+        { $group: { _id: "$targetId", count: { $sum: 1 } } },
+      ])
+      .toArray();
 
-      if (d.targetType === "novel") {
-        slug = String(d.targetId);
-      } else {
-        const key = String(d.targetId);
-        if (chapterNovelCache.has(key)) {
-          slug = chapterNovelCache.get(key)!;
-        } else if (ObjectId.isValid(key)) {
-          const chapter = await chapters.findOne({ _id: new ObjectId(key) });
-          const novelDoc = chapter ? await novels.findOne({ _id: chapter.novelId }, { projection: { slug: 1 } }) : null;
-          slug = novelDoc?.slug ?? null;
-          chapterNovelCache.set(key, slug);
-        } else {
-          const match = key.match(/^(.+)-ch-\d+$/);
-          slug = match ? match[1] : null;
-          chapterNovelCache.set(key, slug);
-        }
+    if (chapterCountAgg.length) {
+      // Batch-fetch chapters for all unique targetIds.
+      const chapterIds = chapterCountAgg
+        .filter((a) => ObjectId.isValid(String(a._id)))
+        .map((a) => new ObjectId(String(a._id)));
+      const chapterDocs = chapterIds.length
+        ? await chapters
+            .find({ _id: { $in: chapterIds } })
+            .project({ _id: 1, novelId: 1 })
+            .toArray()
+        : [];
+      const novelIdByChapterId = new Map(chapterDocs.map((c) => [c._id!.toString(), (c.novelId as ObjectId).toString()]));
+
+      // Batch-fetch novels.
+      const novelIds = [...new Set(chapterDocs.map((c) => (c.novelId as ObjectId).toString()))].map((s) => new ObjectId(s));
+      const novelDocs = novelIds.length
+        ? await novels.find({ _id: { $in: novelIds } }).project({ _id: 1, slug: 1 }).toArray()
+        : [];
+      const slugByNovelId = new Map(novelDocs.map((n) => [n._id!.toString(), n.slug as string]));
+
+      for (const a of chapterCountAgg) {
+        const idStr = String(a._id);
+        const novelId = novelIdByChapterId.get(idStr);
+        if (!novelId) continue;
+        const slug = slugByNovelId.get(novelId);
+        if (!slug) continue;
+        countBySlug.set(slug, (countBySlug.get(slug) ?? 0) + (a.count as number));
       }
-      if (slug) countBySlug.set(slug, (countBySlug.get(slug) ?? 0) + 1);
     }
 
     const sorted = [...countBySlug.entries()].sort((a, b) => b[1] - a[1]).slice(0, limit);
-    const results: { novel: NovelView; discussionCount: number }[] = [];
-    for (const [slug, count] of sorted) {
-      const doc = await novels.findOne({ slug });
-      if (doc) results.push({ novel: fromMongo(doc as Novel & { _id: ObjectId }), discussionCount: count });
-    }
-    return results;
+    if (!sorted.length) return [];
+
+    // Batch-fetch the top novels in one query.
+    const topSlugs = sorted.map(([slug]) => slug);
+    const topNovelDocs = await novels.find({ slug: { $in: topSlugs } }).toArray();
+    const novelViewBySlug = new Map(topNovelDocs.map((d) => [d.slug as string, fromMongo(d as Novel & { _id: ObjectId })]));
+
+    return sorted
+      .map(([slug, count]) => {
+        const novel = novelViewBySlug.get(slug);
+        return novel ? { novel, discussionCount: count } : null;
+      })
+      .filter((x): x is { novel: NovelView; discussionCount: number } => x !== null);
   } catch (err) {
     console.error("[queries] getMostActiveNovels — returning empty list:", err);
     return [];

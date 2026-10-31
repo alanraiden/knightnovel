@@ -35,11 +35,16 @@ export function DiscussionCard({ d, compact = false }: { d: DiscussionView; comp
             <span className="shrink-0">· {timeAgo(d.createdAt)}</span>
           </div>
 
-          {(d.category || d.isPinned) && (
+          {(d.category || d.isPinned || d.isSpoiler) && (
             <div className="mb-1 flex items-center gap-1.5">
               {d.isPinned && (
                 <span className="rounded-full bg-status-warning/15 px-2 py-0.5 text-[10px] font-medium text-status-warning">
                   📌 Pinned
+                </span>
+              )}
+              {d.isSpoiler && (
+                <span className="rounded-full bg-status-warning/15 px-2 py-0.5 text-[10px] font-medium text-status-warning">
+                  ⚠ Spoiler
                 </span>
               )}
               {d.category && (
@@ -63,7 +68,13 @@ export function DiscussionCard({ d, compact = false }: { d: DiscussionView; comp
       </div>
 
       {!compact && d.bodyPreview !== d.title && (
-        <p className="mt-2 line-clamp-2 text-xs text-text-secondary">{d.bodyPreview}</p>
+        d.isSpoiler ? (
+          <p className="mt-2 text-xs italic text-text-muted">
+            Content hidden — click to reveal inside the discussion.
+          </p>
+        ) : (
+          <p className="mt-2 line-clamp-2 text-xs text-text-secondary">{d.bodyPreview}</p>
+        )
       )}
 
       <div className="mt-2 flex items-center gap-1.5 text-[11px] text-accent-highlight">

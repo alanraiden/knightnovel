@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import {
-  getTopDiscussions,
+  getDiscussionFeed,
+  getChapterCommentFeed,
   getPopularTags,
   getTopContributors,
   getMostActiveNovels,
@@ -18,8 +19,19 @@ export function generateMetadata({ searchParams }: { searchParams: { thread?: st
 }
 
 export default async function CommunityPage() {
-  const [discussions, popularTags, topContributors, mostActiveNovels, trendingNovels, novels] = await Promise.all([
-    getTopDiscussions(20, "recent"),
+  const [
+    discussionsFeed,
+    chapterFeed,
+    spoilersFeed,
+    popularTags,
+    topContributors,
+    mostActiveNovels,
+    trendingNovels,
+    novels,
+  ] = await Promise.all([
+    getDiscussionFeed({ limit: 10 }),
+    getChapterCommentFeed({ limit: 10 }),
+    getDiscussionFeed({ limit: 10, isSpoiler: true }),
     getPopularTags(10),
     getTopContributors(6),
     getMostActiveNovels(3),
@@ -29,7 +41,9 @@ export default async function CommunityPage() {
 
   return (
     <CommunityClient
-      discussions={discussions}
+      initialDiscussions={discussionsFeed.items}
+      initialChapterComments={chapterFeed.items}
+      initialSpoilers={spoilersFeed.items}
       popularTags={popularTags}
       topContributors={topContributors}
       mostActiveNovels={mostActiveNovels}
@@ -41,3 +55,4 @@ export default async function CommunityPage() {
     />
   );
 }
+

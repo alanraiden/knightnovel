@@ -1,19 +1,51 @@
-"use client";
+﻿"use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useSession } from "next-auth/react";
 import { Search, Plus, Tags, Users, TrendingUp, Flame } from "lucide-react";
 import { DiscussionCard } from "@/components/community/discussion-card";
+import { ChapterCommentCard } from "@/components/community/chapter-comment-card";
 import { CreateDiscussionModal } from "@/components/community/create-discussion-modal";
 import { cn } from "@/lib/utils";
-import type { DiscussionView, NovelView } from "@/lib/queries";
+import type { DiscussionView, ChapterCommentView, NovelView } from "@/lib/queries";
 
-const sortOptions = ["Recent", "Popular"] as const;
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+type Tab     = "discussions" | "chapter" | "spoilers";
+type SortOpt = "newest" | "oldest" | "popular";
+
+interface DraftState {
+  search:    string;
+  novelSlug: string;
+  sort:      SortOpt;
+}
+
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+const TABS: Tab[] = ["discussions", "chapter", "spoilers"];
+
+const TAB_LABELS: Record<Tab, string> = {
+  discussions: "Discussions",
+  chapter:     "Chapter Comments",
+  spoilers:    "Spoilers",
+};
+
+const EMPTY_MSG: Record<Tab, string> = {
+  discussions: "No discussions yet — be the first to start one.",
+  chapter:     "No chapter comments yet.",
+  spoilers:    "No spoiler discussions yet.",
+};
+
+const DEFAULT_DRAFT: DraftState = { search: "", novelSlug: "", sort: "newest" };
+
+// ─── Component ───────────────────────────────────────────────────────────────
 
 export function CommunityClient({
-  discussions,
+  initialDiscussions,
+  initialChapterComments,
+  initialSpoilers,
   popularTags,
   topContributors,
   mostActiveNovels,
@@ -23,110 +55,123 @@ export function CommunityClient({
   middleAd,
   bottomAd,
 }: {
-  discussions: DiscussionView[];
-  popularTags: { tag: string; count: number }[];
-  topContributors: { name: string; count: number }[];
-  mostActiveNovels: { novel: NovelView; discussionCount: number }[];
-  trendingNovels: NovelView[];
-  novels: NovelView[];
-  topAd?: React.ReactNode;
+  initialDiscussions:     DiscussionView[];
+  initialChapterComments: ChapterCommentView[];
+  initialSpoilers:        DiscussionView[];
+  popularTags:            { tag: string; count: number }[];
+  topContributors:        { name: string; count: number }[];
+  mostActiveNovels:       { novel: NovelView; discussionCount: number }[];
+  trendingNovels:         NovelView[];
+  novels:                 NovelView[];
+  topAd?:    React.ReactNode;
   middleAd?: React.ReactNode;
   bottomAd?: React.ReactNode;
 }) {
   const { data: session } = useSession();
-  const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<(typeof sortOptions)[number]>("Recent");
-  const [novelFilter, setNovelFilter] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("");
+
+  // ── Tab ──
+  const [activeTab, setActiveTab] = useState<Tab>("discussions");
+
+  // ── Filter state ──
+  // `draft` = what is currently shown in the input controls.
+  // Changes to draft do NOT trigger any request.
+  // Only Apply Filters fires a request and persists the fetch.
+  const [draft, setDraft] = useState<DraftState>(DEFAULT_DRAFT);
+  const [loading, setLoading] = useState(false);
+
+  // ── Per-tab item lists (SSR-initialised, replaced by Apply Filters) ──
+  const [discussionItems,  setDiscussionItems]  = useState<DiscussionView[]>(initialDiscussions);
+  const [chapterItems,     setChapterItems]     = useState<ChapterCommentView[]>(initialChapterComments);
+  const [spoilerItems,     setSpoilerItems]     = useState<DiscussionView[]>(initialSpoilers);
+
+  // ── Modal ──
   const [createOpen, setCreateOpen] = useState(false);
 
-  const novelOptions = useMemo(() => {
-    const seen = new Map<string, string>();
-    discussions.forEach((d) => seen.set(d.novelSlug, d.novelTitle));
-    return [...seen.entries()].sort((a, b) => a[1].localeCompare(b[1]));
-  }, [discussions]);
+  // ── Helpers ──────────────────────────────────────────────────────────────
 
-  const categoryOptions = useMemo(() => {
-    const seen = new Set<string>();
-    discussions.forEach((d) => d.category && seen.add(d.category));
-    return [...seen].sort();
-  }, [discussions]);
+  const applyFilters = async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ tab: activeTab, sort: draft.sort });
+      if (draft.novelSlug)   params.set("novel",  draft.novelSlug);
+      if (draft.search.trim()) params.set("search", draft.search.trim());
 
-  const filtered = useMemo(() => {
-    let list = discussions;
-    if (query) {
-      const q = query.toLowerCase();
-      list = list.filter(
-        (d) => d.title.toLowerCase().includes(q) || d.novelTitle.toLowerCase().includes(q)
-      );
+      const res = await fetch(`/api/community?${params}`);
+      if (!res.ok) return;
+
+      const data = await res.json() as { items: unknown[] };
+      if (activeTab === "discussions") setDiscussionItems(data.items as DiscussionView[]);
+      else if (activeTab === "chapter") setChapterItems(data.items as ChapterCommentView[]);
+      else setSpoilerItems(data.items as DiscussionView[]);
+    } catch {
+      // Network error — leave existing items in place.
+    } finally {
+      setLoading(false);
     }
-    if (novelFilter) list = list.filter((d) => d.novelSlug === novelFilter);
-    if (categoryFilter) list = list.filter((d) => d.category === categoryFilter);
-    return [...list].sort((a, b) =>
-      sort === "Popular" ? b.up - a.up : new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
-  }, [discussions, query, sort, novelFilter, categoryFilter]);
+  };
 
-  // Separate content sections rather than one merged feed — novel-page
-  // discussion threads vs. per-chapter comments read very differently.
-  const communityDiscussions = filtered.filter((d) => d.chapterNumber === null);
-  const chapterComments = filtered.filter((d) => d.chapterNumber !== null);
+  // The items for whichever tab is visible right now.
+  const currentItems =
+    activeTab === "chapter"  ? chapterItems :
+    activeTab === "spoilers" ? spoilerItems :
+    discussionItems;
+
+  // ── Render ───────────────────────────────────────────────────────────────
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6">
-      {/* Search + filter bar. Sticky on sm+ only, where it's a single compact
-          row — on mobile it stacks into 4 rows (search / sort / novel /
-          category), so keeping it sticky there pinned nearly half the
-          screen permanently, unlike Browse's non-sticky filter bar. */}
+
+      {/* ── Filter bar ──────────────────────────────────────────────────────
+          Sticky on sm+ (where it collapses to a single compact row).
+          On mobile it stacks, so sticky is deliberately omitted to avoid
+          permanently consuming half the screen. */}
       <div className="glass sm:sticky sm:top-14 z-20 -mx-4 mb-6 flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center">
         <h1 className="hidden text-lg font-medium text-text-primary sm:block">Community</h1>
+
+        {/* Search */}
         <div className="flex flex-1 items-center gap-2 rounded border border-border bg-card/60 px-3 py-2 sm:max-w-sm">
-          <Search size={15} className="text-text-muted" />
+          <Search size={15} className="shrink-0 text-text-muted" />
           <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            value={draft.search}
+            onChange={(e) => setDraft((p) => ({ ...p, search: e.target.value }))}
             placeholder="Search discussions or novels…"
             className="w-full bg-transparent text-sm text-text-primary placeholder:text-text-muted focus:outline-none"
           />
         </div>
-        <div className="flex gap-2">
-          {sortOptions.map((s) => (
-            <button
-              key={s}
-              onClick={() => setSort(s)}
-              className={cn(
-                "rounded-full px-3 py-1.5 text-xs transition-colors",
-                s === sort ? "bg-accent-highlight text-[#412402]" : "border border-border text-text-secondary"
-              )}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
+
+        {/* Sort dropdown */}
         <select
-          value={novelFilter}
-          onChange={(e) => setNovelFilter(e.target.value)}
+          value={draft.sort}
+          onChange={(e) => setDraft((p) => ({ ...p, sort: e.target.value as SortOpt }))}
+          className="rounded border border-border bg-card/60 px-2 py-1.5 text-xs text-text-secondary"
+        >
+          <option value="newest">Newest</option>
+          <option value="oldest">Oldest</option>
+          <option value="popular">Popular</option>
+        </select>
+
+        {/* Novel filter — uses the full novel list, not just what is in the feed */}
+        <select
+          value={draft.novelSlug}
+          onChange={(e) => setDraft((p) => ({ ...p, novelSlug: e.target.value }))}
           className="rounded border border-border bg-card/60 px-2 py-1.5 text-xs text-text-secondary"
         >
           <option value="">All novels</option>
-          {novelOptions.map(([slug, title]) => (
-            <option key={slug} value={slug}>
-              {title}
-            </option>
+          {novels.map((n) => (
+            <option key={n.slug} value={n.slug}>{n.title}</option>
           ))}
         </select>
-        <select
-          value={categoryFilter}
-          onChange={(e) => setCategoryFilter(e.target.value)}
-          className="rounded border border-border bg-card/60 px-2 py-1.5 text-xs text-text-secondary"
+
+        {/* Apply Filters — the ONLY action that fires a request */}
+        <button
+          onClick={applyFilters}
+          disabled={loading}
+          className="rounded border border-accent-highlight/60 px-3 py-1.5 text-xs font-medium text-accent-highlight transition-colors hover:bg-accent-highlight/10 disabled:opacity-50"
         >
-          <option value="">All categories</option>
-          {categoryOptions.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
+          {loading ? "Loading…" : "Apply Filters"}
+        </button>
+
+        {/* New discussion button — desktop only */}
         <button
           onClick={() => setCreateOpen(true)}
           className="hidden shrink-0 items-center gap-1.5 rounded bg-accent-highlight px-3 py-2 text-xs font-medium text-[#412402] transition-transform hover:scale-[1.03] sm:flex"
@@ -138,8 +183,9 @@ export function CommunityClient({
       {topAd && <div className="mb-6">{topAd}</div>}
 
       <div className="grid gap-8 lg:grid-cols-[1fr_280px]">
-        <div className="space-y-10">
-          {/* Section: Most Active Novels — horizontal cover strip */}
+        <div className="space-y-8">
+
+          {/* ── Most Active Novels — horizontal cover strip ────────────────── */}
           <section>
             <p className="mb-3 flex items-center gap-1.5 text-sm font-medium text-text-primary">
               <Flame size={14} className="text-accent-highlight" /> Most Active Novels
@@ -173,43 +219,49 @@ export function CommunityClient({
             )}
           </section>
 
-          {/* Section: Community Discussions — novel-page threads */}
+          {/* ── Tabs + Feed ───────────────────────────────────────────────── */}
           <section>
-            <p className="mb-3 text-sm font-medium text-text-primary">Community Discussions</p>
-            {communityDiscussions.length === 0 ? (
-              <p className="rounded-card border border-border bg-surface p-6 text-center text-sm text-text-muted">
-                No novel-page discussions yet — be the first to start one.
-              </p>
-            ) : (
-              <div className="grid gap-3 sm:grid-cols-2">
-                {communityDiscussions.map((d) => (
+            {/* Tab strip */}
+            <div className="flex border-b border-border">
+              {TABS.map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={cn(
+                    "px-4 py-2 text-sm font-medium transition-colors",
+                    activeTab === tab
+                      ? "-mb-px border-b-2 border-accent-highlight text-accent-highlight"
+                      : "text-text-muted hover:text-text-secondary"
+                  )}
+                >
+                  {TAB_LABELS[tab]}
+                </button>
+              ))}
+            </div>
+
+            {/* Feed — single full-width card per row on all viewports */}
+            <div className={cn("mt-4 space-y-3", loading && "pointer-events-none opacity-50")}>
+              {currentItems.length === 0 ? (
+                <p className="rounded-card border border-border bg-surface p-6 text-center text-sm text-text-muted">
+                  {EMPTY_MSG[activeTab]}
+                </p>
+              ) : activeTab === "chapter" ? (
+                chapterItems.map((item) => (
+                  <ChapterCommentCard key={item.id} item={item} />
+                ))
+              ) : (
+                (activeTab === "spoilers" ? spoilerItems : discussionItems).map((d) => (
                   <DiscussionCard key={d.id} d={d} />
-                ))}
-              </div>
-            )}
+                ))
+              )}
+            </div>
           </section>
 
           {middleAd && <div>{middleAd}</div>}
-
-          {/* Section: Latest Chapter Comments */}
-          <section>
-            <p className="mb-3 text-sm font-medium text-text-primary">Latest Chapter Comments</p>
-            {chapterComments.length === 0 ? (
-              <p className="rounded-card border border-border bg-surface p-6 text-center text-sm text-text-muted">
-                No chapter comments yet.
-              </p>
-            ) : (
-              <div className="grid gap-3 sm:grid-cols-2">
-                {chapterComments.map((d) => (
-                  <DiscussionCard key={d.id} d={d} />
-                ))}
-              </div>
-            )}
-          </section>
-
           {bottomAd && <div>{bottomAd}</div>}
         </div>
 
+        {/* ── Sidebar ─────────────────────────────────────────────────────── */}
         <aside className="hidden space-y-6 lg:block">
           <div>
             <p className="mb-2 flex items-center gap-1.5 text-sm font-medium text-text-primary">
@@ -225,6 +277,9 @@ export function CommunityClient({
                   {n.title}
                 </Link>
               ))}
+              {trendingNovels.length === 0 && (
+                <p className="text-xs text-text-muted">No trending novels yet.</p>
+              )}
             </div>
           </div>
 
@@ -257,13 +312,15 @@ export function CommunityClient({
                   <span className="text-text-muted">{c.count}</span>
                 </div>
               ))}
-              {topContributors.length === 0 && <p className="text-xs text-text-muted">No activity yet.</p>}
+              {topContributors.length === 0 && (
+                <p className="text-xs text-text-muted">No activity yet.</p>
+              )}
             </div>
           </div>
         </aside>
       </div>
 
-      {/* Floating action button — mobile only */}
+      {/* ── Mobile FAB ──────────────────────────────────────────────────────── */}
       <button
         onClick={() => setCreateOpen(true)}
         aria-label="New discussion"
