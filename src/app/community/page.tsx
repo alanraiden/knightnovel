@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import {
   getDiscussionFeed,
   getChapterCommentFeed,
@@ -11,14 +12,25 @@ import {
 import { CommunityClient } from "@/components/community/community-client";
 import { AdSlot } from "@/components/ads/ad-slot";
 
-export function generateMetadata({ searchParams }: { searchParams: { thread?: string } }): Metadata {
+const VALID_TABS = new Set(["discussions", "chapter", "spoilers"]);
+
+type Tab = "discussions" | "chapter" | "spoilers";
+
+interface PageProps {
+  searchParams: { thread?: string; tab?: string; page?: string };
+}
+
+export function generateMetadata({ searchParams }: PageProps): Metadata {
   return {
     title: searchParams.thread ? `${searchParams.thread} · Community` : "Community",
     description: "Browse and join real discussions with other readers on Knight Novel.",
   };
 }
 
-export default async function CommunityPage() {
+async function CommunityPageInner({ searchParams }: PageProps) {
+  const rawTab = searchParams.tab ?? "discussions";
+  const initialTab: Tab = VALID_TABS.has(rawTab) ? (rawTab as Tab) : "discussions";
+
   const [
     discussionsFeed,
     chapterFeed,
@@ -42,13 +54,17 @@ export default async function CommunityPage() {
   return (
     <CommunityClient
       initialDiscussions={discussionsFeed.items}
+      initialDiscussionsTotal={discussionsFeed.total}
       initialChapterComments={chapterFeed.items}
+      initialChapterTotal={chapterFeed.total}
       initialSpoilers={spoilersFeed.items}
+      initialSpoilersTotal={spoilersFeed.total}
       popularTags={popularTags}
       topContributors={topContributors}
       mostActiveNovels={mostActiveNovels}
       trendingNovels={trendingNovels}
       novels={novels}
+      initialTab={initialTab}
       topAd={<AdSlot page="community" position="top" />}
       middleAd={<AdSlot page="community" position="middle" />}
       bottomAd={<AdSlot page="community" position="bottom" />}
@@ -56,3 +72,10 @@ export default async function CommunityPage() {
   );
 }
 
+export default function CommunityPage(props: PageProps) {
+  return (
+    <Suspense fallback={<div className="mx-auto max-w-7xl px-4 py-6 text-sm text-text-muted">Loading community…</div>}>
+      <CommunityPageInner {...props} />
+    </Suspense>
+  );
+}

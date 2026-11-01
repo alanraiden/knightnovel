@@ -9,14 +9,21 @@ const MAX_LINES = 18;
 /**
  * A contenteditable-based text composer, not a <textarea>.
  *
- * Why: Android's Gboard only offers its sticker/GIF picker to elements it
- * considers "rich" input targets — a plain <textarea>/<input> gets rejected
- * with "this app does not support image here" the moment you tap a sticker,
- * because Gboard checks whether the focused element is contenteditable
- * before it'll hand over image content at all. Switching to a real
- * contenteditable div is what makes the sticker/GIF picker available in the
- * keyboard in the first place — the paste handler below is what actually
- * receives what gets picked.
+ * Why contenteditable: Android's Gboard only offers its GIF/sticker picker to
+ * elements it considers a "rich" input target. A plain <textarea>/<input>
+ * receives "This app does not support image here" when the user taps the GIF
+ * button, because Gboard checks the focused element before handing over image
+ * content. A <div contentEditable> is what makes the picker available at all.
+ *
+ * How Gboard delivers images (confirmed Web platform behaviour):
+ *   • The GIF/sticker is delivered as a `beforeinput` event with
+ *     inputType === "insertContent" (Chrome 75+, Android Chrome via Gboard).
+ *   • event.dataTransfer?.items contains the image blob (commonly image/gif,
+ *     image/webp, or image/png depending on keyboard version).
+ *   • This is NOT a clipboard paste — onPaste never fires for keyboard GIF
+ *     insertion. The beforeinput handler is the only correct interception
+ *     point on Android Chrome.
+ *   • Desktop Chrome clipboard paste arrives as onPaste, covered separately.
  *
  * Typed text still behaves like a plain-text field: paste is intercepted
  * and forced to plain text (no rich HTML), and content is read back via
@@ -62,6 +69,7 @@ export function EditableComposer({
     onValueChange(next);
   };
 
+  // ── Clipboard paste (desktop + Android copy-paste) ──────────────────────
   const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
     const items = e.clipboardData?.items;
     if (items) {
@@ -91,6 +99,41 @@ export function EditableComposer({
     handleInput();
   };
 
+  // ── Gboard / IME image insertion (Android Chrome) ────────────────────────
+  // Gboard delivers GIFs via beforeinput with inputType === "insertContent".
+  // event.dataTransfer contains the image blob. This fires BEFORE the element
+  // content changes, so we can cancel it and handle the file ourselves.
+  // We must attach this with addEventListener (not React's synthetic event
+  // system) because React does not expose the non-cancelable InputEvent
+  // dataTransfer on the synthetic wrapper in all versions.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !onImagePaste) return;
+
+    const handler = (e: Event) => {
+      const ie = e as InputEvent;
+      if (ie.inputType !== "insertContent") return;
+
+      const dt = ie.dataTransfer;
+      if (!dt) return;
+
+      const items = Array.from(dt.items ?? []);
+      const imageItem = items.find(
+        (item) => item.kind === "file" && item.type.startsWith("image/")
+      );
+      if (!imageItem) return;
+
+      // Cancel the browser's default insertion of the image as an <img>
+      // inside the contenteditable — we handle it ourselves via R2 upload.
+      e.preventDefault();
+      const file = imageItem.getAsFile();
+      if (file) onImagePaste(file);
+    };
+
+    el.addEventListener("beforeinput", handler);
+    return () => el.removeEventListener("beforeinput", handler);
+  }, [onImagePaste]);
+
   return (
     <div className="relative">
       {!value && placeholder && (
@@ -104,6 +147,12 @@ export function EditableComposer({
         role="textbox"
         aria-multiline="true"
         aria-label={placeholder}
+        // `enterkeyhint` and `inputmode` tell Android keyboards this is a
+        // multi-line text input, which unlocks Gboard's emoji/GIF shelf.
+        // Without inputmode the shelf may still show but image insertion
+        // is gated behind the beforeinput check above.
+        enterKeyHint="enter"
+        inputMode="text"
         onInput={handleInput}
         onPaste={handlePaste}
         onFocus={() => setFocused(true)}

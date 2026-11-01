@@ -1,10 +1,11 @@
-﻿"use client";
+"use client";
 
-import { useState } from "react";
+import { useState, useCallback, useRef } from "react";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { useSession } from "next-auth/react";
-import { Search, Plus, Tags, Users, TrendingUp, Flame } from "lucide-react";
+import { Search, Plus, Tags, Users, TrendingUp, Flame, ChevronLeft, ChevronRight } from "lucide-react";
 import { DiscussionCard } from "@/components/community/discussion-card";
 import { ChapterCommentCard } from "@/components/community/chapter-comment-card";
 import { CreateDiscussionModal } from "@/components/community/create-discussion-modal";
@@ -22,8 +23,16 @@ interface DraftState {
   sort:      SortOpt;
 }
 
+interface TabData<T> {
+  items:   T[];
+  total:   number;
+  hasMore: boolean;
+  page:    number;       // 1-based current page
+}
+
 // ─── Constants ───────────────────────────────────────────────────────────────
 
+const PAGE_SIZE = 10;
 const TABS: Tab[] = ["discussions", "chapter", "spoilers"];
 
 const TAB_LABELS: Record<Tab, string> = {
@@ -40,81 +49,307 @@ const EMPTY_MSG: Record<Tab, string> = {
 
 const DEFAULT_DRAFT: DraftState = { search: "", novelSlug: "", sort: "newest" };
 
+// ─── Paginator ───────────────────────────────────────────────────────────────
+
+function Paginator({
+  page,
+  totalPages,
+  onGo,
+  disabled,
+}: {
+  page:       number;
+  totalPages: number;
+  onGo:       (p: number) => void;
+  disabled:   boolean;
+}) {
+  const [popoverOpen, setPopoverOpen] = useState(false);
+  const [inputVal,    setInputVal]    = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  if (totalPages <= 1) return null;
+
+  // Build the page number sequence with at most one ellipsis on each side.
+  // e.g. [1, "…", 4, 5, 6, "…", 12]
+  const pages: (number | "…")[] = [];
+  const add = (n: number) => { if (!pages.includes(n)) pages.push(n); };
+  add(1);
+  if (page > 4) pages.push("…");
+  for (let p = Math.max(2, page - 1); p <= Math.min(totalPages - 1, page + 1); p++) add(p);
+  if (page < totalPages - 3) pages.push("…");
+  if (totalPages > 1) add(totalPages);
+
+  const openPopover = () => {
+    setInputVal(String(page));
+    setPopoverOpen(true);
+    setTimeout(() => inputRef.current?.select(), 30);
+  };
+
+  const commitGo = () => {
+    const n = parseInt(inputVal, 10);
+    if (n >= 1 && n <= totalPages && n !== page) onGo(n);
+    setPopoverOpen(false);
+  };
+
+  const btnBase =
+    "flex h-7 min-w-[28px] items-center justify-center rounded px-1.5 text-xs font-medium transition-colors disabled:opacity-40";
+
+  return (
+    <div className="mt-6 flex items-center justify-center gap-1 text-text-secondary">
+      {/* Previous */}
+      <button
+        onClick={() => onGo(page - 1)}
+        disabled={page <= 1 || disabled}
+        aria-label="Previous page"
+        className={cn(btnBase, "hover:bg-surface hover:text-text-primary")}
+      >
+        <ChevronLeft size={14} />
+      </button>
+
+      {/* Page numbers */}
+      {pages.map((p, i) =>
+        p === "…" ? (
+          <div key={`ellipsis-${i}`} className="relative">
+            <button
+              onClick={openPopover}
+              className={cn(btnBase, "hover:bg-surface hover:text-text-primary")}
+              aria-label="Jump to page"
+            >
+              …
+            </button>
+            {popoverOpen && (
+              <div className="absolute bottom-full left-1/2 z-40 mb-2 -translate-x-1/2 rounded-card border border-border bg-surface p-3 shadow-2xl">
+                <p className="mb-2 whitespace-nowrap text-[11px] text-text-muted">
+                  Go to page (1–{totalPages})
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    ref={inputRef}
+                    type="number"
+                    min={1}
+                    max={totalPages}
+                    value={inputVal}
+                    onChange={(e) => setInputVal(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") commitGo();
+                      if (e.key === "Escape") setPopoverOpen(false);
+                    }}
+                    className="w-16 rounded border border-border bg-card px-2 py-1 text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-highlight/60"
+                  />
+                  <button
+                    onClick={commitGo}
+                    className="rounded bg-accent-highlight px-2 py-1 text-xs font-medium text-[#412402]"
+                  >
+                    Go
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <button
+            key={p}
+            onClick={() => p !== page && onGo(p as number)}
+            disabled={disabled}
+            className={cn(
+              btnBase,
+              p === page
+                ? "bg-accent-highlight text-[#412402]"
+                : "hover:bg-surface hover:text-text-primary"
+            )}
+          >
+            {p}
+          </button>
+        )
+      )}
+
+      {/* Next */}
+      <button
+        onClick={() => onGo(page + 1)}
+        disabled={page >= totalPages || disabled}
+        aria-label="Next page"
+        className={cn(btnBase, "hover:bg-surface hover:text-text-primary")}
+      >
+        <ChevronRight size={14} />
+      </button>
+    </div>
+  );
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function CommunityClient({
   initialDiscussions,
+  initialDiscussionsTotal,
   initialChapterComments,
+  initialChapterTotal,
   initialSpoilers,
+  initialSpoilersTotal,
   popularTags,
   topContributors,
   mostActiveNovels,
   trendingNovels,
   novels,
+  initialTab,
   topAd,
   middleAd,
   bottomAd,
 }: {
-  initialDiscussions:     DiscussionView[];
-  initialChapterComments: ChapterCommentView[];
-  initialSpoilers:        DiscussionView[];
-  popularTags:            { tag: string; count: number }[];
-  topContributors:        { name: string; count: number }[];
-  mostActiveNovels:       { novel: NovelView; discussionCount: number }[];
-  trendingNovels:         NovelView[];
-  novels:                 NovelView[];
+  initialDiscussions:      DiscussionView[];
+  initialDiscussionsTotal: number;
+  initialChapterComments:  ChapterCommentView[];
+  initialChapterTotal:     number;
+  initialSpoilers:         DiscussionView[];
+  initialSpoilersTotal:    number;
+  popularTags:             { tag: string; count: number }[];
+  topContributors:         { name: string; count: number }[];
+  mostActiveNovels:        { novel: NovelView; discussionCount: number }[];
+  trendingNovels:          NovelView[];
+  novels:                  NovelView[];
+  initialTab:              Tab;
   topAd?:    React.ReactNode;
   middleAd?: React.ReactNode;
   bottomAd?: React.ReactNode;
 }) {
   const { data: session } = useSession();
+  const router     = useRouter();
+  const pathname   = usePathname();
+  const searchParams = useSearchParams();
 
   // ── Tab ──
-  const [activeTab, setActiveTab] = useState<Tab>("discussions");
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
 
   // ── Filter state ──
-  // `draft` = what is currently shown in the input controls.
-  // Changes to draft do NOT trigger any request.
-  // Only Apply Filters fires a request and persists the fetch.
-  const [draft, setDraft] = useState<DraftState>(DEFAULT_DRAFT);
+  const [draft,   setDraft]   = useState<DraftState>(DEFAULT_DRAFT);
+  // Applied filters (what the last fetch actually used)
+  const [applied, setApplied] = useState<DraftState>(DEFAULT_DRAFT);
   const [loading, setLoading] = useState(false);
 
-  // ── Per-tab item lists (SSR-initialised, replaced by Apply Filters) ──
-  const [discussionItems,  setDiscussionItems]  = useState<DiscussionView[]>(initialDiscussions);
-  const [chapterItems,     setChapterItems]     = useState<ChapterCommentView[]>(initialChapterComments);
-  const [spoilerItems,     setSpoilerItems]     = useState<DiscussionView[]>(initialSpoilers);
+  // ── Per-tab data (items + total + page) ──
+  const [discData, setDiscData] = useState<TabData<DiscussionView>>({
+    items:   initialDiscussions,
+    total:   initialDiscussionsTotal,
+    hasMore: initialDiscussionsTotal > PAGE_SIZE,
+    page:    1,
+  });
+  const [chapData, setChapData] = useState<TabData<ChapterCommentView>>({
+    items:   initialChapterComments,
+    total:   initialChapterTotal,
+    hasMore: initialChapterTotal > PAGE_SIZE,
+    page:    1,
+  });
+  const [spoilData, setSpoilData] = useState<TabData<DiscussionView>>({
+    items:   initialSpoilers,
+    total:   initialSpoilersTotal,
+    hasMore: initialSpoilersTotal > PAGE_SIZE,
+    page:    1,
+  });
 
   // ── Modal ──
   const [createOpen, setCreateOpen] = useState(false);
 
-  // ── Helpers ──────────────────────────────────────────────────────────────
+  // ── URL sync helper ──
+  const pushUrl = useCallback(
+    (tab: Tab, page: number) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("tab", tab);
+      if (page > 1) params.set("page", String(page));
+      else params.delete("page");
+      router.push(`${pathname}?${params}`, { scroll: false });
+    },
+    [router, pathname, searchParams]
+  );
 
-  const applyFilters = async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({ tab: activeTab, sort: draft.sort });
-      if (draft.novelSlug)   params.set("novel",  draft.novelSlug);
-      if (draft.search.trim()) params.set("search", draft.search.trim());
+  // ── Fetch a page (server-side) ──
+  const fetchPage = useCallback(
+    async (
+      tab:    Tab,
+      page:   number,
+      filters: DraftState
+    ) => {
+      const offset = (page - 1) * PAGE_SIZE;
+      const params = new URLSearchParams({
+        tab,
+        sort:   filters.sort,
+        limit:  String(PAGE_SIZE),
+        offset: String(offset),
+      });
+      if (filters.novelSlug)   params.set("novel",  filters.novelSlug);
+      if (filters.search.trim()) params.set("search", filters.search.trim());
 
       const res = await fetch(`/api/community?${params}`);
-      if (!res.ok) return;
+      if (!res.ok) return null;
+      return res.json() as Promise<{ items: unknown[]; total: number; hasMore: boolean }>;
+    },
+    []
+  );
 
-      const data = await res.json() as { items: unknown[] };
-      if (activeTab === "discussions") setDiscussionItems(data.items as DiscussionView[]);
-      else if (activeTab === "chapter") setChapterItems(data.items as ChapterCommentView[]);
-      else setSpoilerItems(data.items as DiscussionView[]);
+  // ── Navigate to a page within the active tab ──
+  const goToPage = useCallback(
+    async (tab: Tab, page: number, filters: DraftState) => {
+      setLoading(true);
+      try {
+        const data = await fetchPage(tab, page, filters);
+        if (!data) return;
+
+        if (tab === "discussions") {
+          setDiscData({ items: data.items as DiscussionView[], total: data.total, hasMore: data.hasMore, page });
+        } else if (tab === "chapter") {
+          setChapData({ items: data.items as ChapterCommentView[], total: data.total, hasMore: data.hasMore, page });
+        } else {
+          setSpoilData({ items: data.items as DiscussionView[], total: data.total, hasMore: data.hasMore, page });
+        }
+        pushUrl(tab, page);
+      } catch {
+        // Leave existing items in place on network error.
+      } finally {
+        setLoading(false);
+      }
+    },
+    [fetchPage, pushUrl]
+  );
+
+  // ── Tab switch ──
+  const switchTab = (tab: Tab) => {
+    setActiveTab(tab);
+    pushUrl(tab, currentPage(tab));
+  };
+
+  // ── Apply Filters ──
+  const applyFilters = async () => {
+    setLoading(true);
+    setApplied(draft);
+    try {
+      // Reset all tabs to page 1 with new filters.
+      const [discRes, chapRes, spoilRes] = await Promise.all([
+        fetchPage("discussions", 1, draft),
+        fetchPage("chapter",     1, draft),
+        fetchPage("spoilers",    1, draft),
+      ]);
+
+      if (discRes)  setDiscData ({ items: discRes.items  as DiscussionView[],      total: discRes.total,  hasMore: discRes.hasMore,  page: 1 });
+      if (chapRes)  setChapData ({ items: chapRes.items  as ChapterCommentView[],   total: chapRes.total,  hasMore: chapRes.hasMore,  page: 1 });
+      if (spoilRes) setSpoilData({ items: spoilRes.items as DiscussionView[],      total: spoilRes.total, hasMore: spoilRes.hasMore, page: 1 });
+
+      pushUrl(activeTab, 1);
     } catch {
-      // Network error — leave existing items in place.
+      // leave existing state
     } finally {
       setLoading(false);
     }
   };
 
-  // The items for whichever tab is visible right now.
-  const currentItems =
-    activeTab === "chapter"  ? chapterItems :
-    activeTab === "spoilers" ? spoilerItems :
-    discussionItems;
+  // ── Current tab data ──
+  const currentData =
+    activeTab === "chapter"  ? chapData  :
+    activeTab === "spoilers" ? spoilData :
+    discData;
+
+  const currentPage = (tab: Tab) =>
+    tab === "chapter"  ? chapData.page  :
+    tab === "spoilers" ? spoilData.page :
+    discData.page;
+
+  const totalPages = Math.max(1, Math.ceil(currentData.total / PAGE_SIZE));
 
   // ── Render ───────────────────────────────────────────────────────────────
 
@@ -134,6 +369,7 @@ export function CommunityClient({
           <input
             value={draft.search}
             onChange={(e) => setDraft((p) => ({ ...p, search: e.target.value }))}
+            onKeyDown={(e) => e.key === "Enter" && applyFilters()}
             placeholder="Search discussions or novels…"
             className="w-full bg-transparent text-sm text-text-primary placeholder:text-text-muted focus:outline-none"
           />
@@ -226,7 +462,7 @@ export function CommunityClient({
               {TABS.map((tab) => (
                 <button
                   key={tab}
-                  onClick={() => setActiveTab(tab)}
+                  onClick={() => switchTab(tab)}
                   className={cn(
                     "px-4 py-2 text-sm font-medium transition-colors",
                     activeTab === tab
@@ -235,26 +471,47 @@ export function CommunityClient({
                   )}
                 >
                   {TAB_LABELS[tab]}
+                  {/* Live total badge */}
+                  <span className="ml-1.5 text-[10px] text-text-disabled">
+                    {tab === "discussions" ? discData.total
+                     : tab === "chapter"  ? chapData.total
+                     : spoilData.total}
+                  </span>
                 </button>
               ))}
             </div>
 
             {/* Feed — single full-width card per row on all viewports */}
             <div className={cn("mt-4 space-y-3", loading && "pointer-events-none opacity-50")}>
-              {currentItems.length === 0 ? (
+              {currentData.items.length === 0 ? (
                 <p className="rounded-card border border-border bg-surface p-6 text-center text-sm text-text-muted">
                   {EMPTY_MSG[activeTab]}
                 </p>
               ) : activeTab === "chapter" ? (
-                chapterItems.map((item) => (
+                chapData.items.map((item) => (
                   <ChapterCommentCard key={item.id} item={item} />
                 ))
               ) : (
-                (activeTab === "spoilers" ? spoilerItems : discussionItems).map((d) => (
+                (activeTab === "spoilers" ? spoilData.items : discData.items).map((d) => (
                   <DiscussionCard key={d.id} d={d} />
                 ))
               )}
             </div>
+
+            {/* Pagination */}
+            <Paginator
+              page={currentData.page}
+              totalPages={totalPages}
+              disabled={loading}
+              onGo={(p) => goToPage(activeTab, p, applied)}
+            />
+
+            {/* Result summary */}
+            {currentData.total > 0 && (
+              <p className="mt-3 text-center text-[11px] text-text-muted">
+                Showing {((currentData.page - 1) * PAGE_SIZE) + 1}–{Math.min(currentData.page * PAGE_SIZE, currentData.total)} of {currentData.total}
+              </p>
+            )}
           </section>
 
           {middleAd && <div>{middleAd}</div>}
